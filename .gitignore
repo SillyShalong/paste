@@ -8,3 +8,9 @@ src-tauri/gen/schemas/
 *.db
 *.db-wal
 *.db-shm
+/panel-screenshot*.png
+/verify-*.png
+/paste-test*.png
+/panel-*.png
+/gear-crop.png
+/chip-crop.png

@@ -9,6 +9,7 @@ export default function Sidebar() {
   const setView = useStore((s) => s.setView);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [pendingDel, setPendingDel] = useState<number | null>(null);
 
   if (!open) return null;
 
@@ -38,18 +39,42 @@ export default function Sidebar() {
         >
           <BoardIcon />
           <span className="board-name">{p.name}</span>
-          <button
-            className="board-del"
-            title="Delete pinboard"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm(`Delete pinboard “${p.name}”? Clips return to history.`)) {
-                useStore.getState().deletePinboard(p.id);
-              }
-            }}
-          >
-            ×
-          </button>
+          {pendingDel === p.id ? (
+            <span className="board-del-confirm" onMouseDown={(e) => e.stopPropagation()}>
+              <button
+                className="yes"
+                title="Delete pinboard — clips return to history"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useStore.getState().deletePinboard(p.id);
+                  setPendingDel(null);
+                }}
+              >
+                ✓
+              </button>
+              <button
+                className="no"
+                title="Cancel"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPendingDel(null);
+                }}
+              >
+                ✕
+              </button>
+            </span>
+          ) : (
+            <button
+              className="board-del"
+              title="Delete pinboard"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPendingDel(p.id);
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
       {creating ? (

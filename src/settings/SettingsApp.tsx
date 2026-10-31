@@ -7,6 +7,8 @@ export default function SettingsApp() {
   const [pinboards, setPinboards] = useState<Pinboard[]>([]);
   const [recording, setRecording] = useState(false);
   const [newExe, setNewExe] = useState("");
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [pendingDelBoard, setPendingDelBoard] = useState<number | null>(null);
 
   useEffect(() => {
     api.getInitial().then((d) => {
@@ -110,16 +112,27 @@ export default function SettingsApp() {
           </select>
         </Row>
         <div className="settings-actions">
-          <button
-            className="btn danger"
-            onClick={() => {
-              if (confirm("Clear all clipboard history? Pinned items are kept.")) {
-                api.clearHistory();
-              }
-            }}
-          >
-            Clear History
-          </button>
+          {confirmingClear ? (
+            <>
+              <span className="confirm-inline-msg">Clear all history? Pinned items are kept.</span>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  api.clearHistory();
+                  setConfirmingClear(false);
+                }}
+              >
+                Confirm
+              </button>
+              <button className="btn" onClick={() => setConfirmingClear(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="btn danger" onClick={() => setConfirmingClear(true)}>
+              Clear History
+            </button>
+          )}
         </div>
       </section>
 
@@ -185,17 +198,27 @@ export default function SettingsApp() {
           {pinboards.map((p) => (
             <span className="excluded-chip" key={p.id}>
               {p.name}
-              <button
-                onClick={() => {
-                  if (confirm(`Delete pinboard “${p.name}”? Clips return to history.`)) {
-                    api.deletePinboard(p.id).then(() => {
-                      setPinboards((bs) => bs.filter((b) => b.id !== p.id));
-                    });
-                  }
-                }}
-              >
-                ×
-              </button>
+              {pendingDelBoard === p.id ? (
+                <span className="confirm-inline">
+                  <button
+                    className="yes"
+                    title="Delete — clips return to history"
+                    onClick={() => {
+                      api.deletePinboard(p.id).then(() => {
+                        setPinboards((bs) => bs.filter((b) => b.id !== p.id));
+                      });
+                      setPendingDelBoard(null);
+                    }}
+                  >
+                    ✓
+                  </button>
+                  <button className="no" title="Cancel" onClick={() => setPendingDelBoard(null)}>
+                    ✕
+                  </button>
+                </span>
+              ) : (
+                <button onClick={() => setPendingDelBoard(p.id)}>×</button>
+              )}
             </span>
           ))}
           {pinboards.length === 0 && (

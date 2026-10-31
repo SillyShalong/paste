@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useStore } from "../store/useStore";
 import type { ClipKind } from "../types";
 import { api } from "../lib/api";
+import ConfirmPopover from "./ConfirmPopover";
 
 const FILTERS: { key: ClipKind | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -57,19 +59,38 @@ export default function SearchBar() {
           </button>
         ))}
         <div className="spacer" />
-        <button
-          className="chip danger"
-          title="Clear all unpinned history"
-          onClick={() => {
-            if (confirm("Clear all clipboard history? Pinned items are kept.")) {
-              useStore.getState().clearHistory();
-            }
-          }}
-        >
-          Clear History
-        </button>
+        <ClearHistoryChip />
         <span className="app-label">{settings?.hotkey.replace("CmdOrCtrl", "Ctrl")}</span>
       </div>
+    </div>
+  );
+}
+
+/// Clear-history button with an in-panel confirmation popover.
+/// (A native confirm() dialog would steal focus from the panel and trigger
+/// the auto-hide-on-blur behavior, closing the panel — so we never use one.)
+function ClearHistoryChip() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="clear-wrap">
+      <button
+        className={`chip danger ${open ? "active" : ""}`}
+        title="Clear all unpinned history"
+        onClick={() => setOpen((v) => !v)}
+      >
+        Clear History
+      </button>
+      {open && (
+        <ConfirmPopover
+          message="Clear all clipboard history? Pinned items are kept."
+          confirmLabel="Clear"
+          onConfirm={() => {
+            useStore.getState().clearHistory();
+            setOpen(false);
+          }}
+          onDismiss={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }

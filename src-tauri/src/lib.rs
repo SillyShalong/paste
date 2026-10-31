@@ -196,7 +196,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 commands::toggle_pause_cmd(app).ok();
             }
             "settings" => {
-                commands::open_settings(app.clone());
+                // Spawn: the tray handler runs on the main thread, and
+                // creating a webview here would deadlock it (same as the
+                // sync-command variant of this bug).
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_settings_window(&handle);
+                });
             }
             "quit" => app.exit(0),
             _ => {}

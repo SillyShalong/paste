@@ -213,8 +213,11 @@ pub fn hide_panel(app: AppHandle) {
     }
 }
 
+/// Async on purpose: creating a webview window from a sync command runs on
+/// the main thread, and WebView2 initialization then deadlocks the event
+/// loop (window appears but the whole app freezes and can't be closed).
 #[tauri::command]
-pub fn open_settings(app: AppHandle) {
+pub async fn open_settings(app: AppHandle) {
     let _ = crate::open_settings_window(&app);
 }
 

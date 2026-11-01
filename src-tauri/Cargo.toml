@@ -1,6 +1,6 @@
 [package]
 name = "paste"
-version = "0.3.1"
+version = "0.4.0"
 description = "Paste — a clipboard history app (clone of Paste for Mac) for Windows"
 authors = ["paste-clone"]
 edition = "2021"
@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }

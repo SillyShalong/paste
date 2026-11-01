@@ -3,6 +3,11 @@ import { getVersion } from "@tauri-apps/api/app";
 import { api } from "../lib/api";
 import type { Pinboard, Settings } from "../types";
 
+interface TrayIconOption {
+  id: string;
+  pngBase64: string;
+}
+
 export default function SettingsApp() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pinboards, setPinboards] = useState<Pinboard[]>([]);
@@ -11,6 +16,7 @@ export default function SettingsApp() {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [pendingDelBoard, setPendingDelBoard] = useState<number | null>(null);
   const [version, setVersion] = useState<string>("…");
+  const [trayIcons, setTrayIcons] = useState<TrayIconOption[]>([]);
 
   useEffect(() => {
     api.getInitial().then((d) => {
@@ -18,6 +24,7 @@ export default function SettingsApp() {
       setPinboards(d.pinboards);
     });
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
+    api.listTrayIcons().then(setTrayIcons).catch(() => setTrayIcons([]));
   }, []);
 
   const update = async (patch: Partial<Settings>) => {
@@ -90,6 +97,23 @@ export default function SettingsApp() {
             <option value="natural">Down = browse newer (scroll left)</option>
           </select>
         </Row>
+      </section>
+
+      <section className="settings-section">
+        <h2>Tray icon</h2>
+        <div className="tray-grid">
+          {trayIcons.map((t) => (
+            <button
+              key={t.id}
+              className={`tray-option ${(settings.trayIcon || "classic") === t.id ? "active" : ""}`}
+              title={t.id}
+              onClick={() => update({ trayIcon: t.id })}
+            >
+              <img src={`data:image/png;base64,${t.pngBase64}`} alt={t.id} draggable={false} />
+              <span>{t.id}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="settings-section">

@@ -2409,7 +2409,7 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "ammonia",
  "base64 0.22.1",
@@ -3434,6 +3434,7 @@ dependencies = [
  "heck 0.5.0",
  "http",
  "http-range",
+ "image",
  "jni",
  "libc",
  "log",

@@ -23,6 +23,33 @@ use state::AppState;
 /// Logical height of the panel strip (CSS px at 100% scale).
 const PANEL_HEIGHT: f64 = 440.0;
 
+/// Selectable tray icon variants (embedded at compile time).
+const TRAY_ICON_SETS: &[(&str, &[u8])] = &[
+    ("classic", include_bytes!("../icons/tray/classic.png")),
+    ("emerald", include_bytes!("../icons/tray/emerald.png")),
+    ("sunset", include_bytes!("../icons/tray/sunset.png")),
+    ("ocean", include_bytes!("../icons/tray/ocean.png")),
+    ("mono", include_bytes!("../icons/tray/mono.png")),
+    ("pearl", include_bytes!("../icons/tray/pearl.png")),
+];
+
+fn tray_icon_image(name: &str) -> tauri::image::Image<'static> {
+    let bytes = TRAY_ICON_SETS
+        .iter()
+        .find(|(id, _)| *id == name)
+        .or_else(|| TRAY_ICON_SETS.first())
+        .map(|(_, b)| *b)
+        .expect("tray icon set is not empty");
+    tauri::image::Image::from_bytes(bytes).expect("embedded tray icon must decode")
+}
+
+/// Swap the tray icon at runtime (settings changes).
+pub fn apply_tray_icon(app: &AppHandle, name: &str) {
+    if let Some(tray) = app.tray_by_id("tray") {
+        let _ = tray.set_icon(Some(tray_icon_image(name)));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -47,9 +74,12 @@ pub fn run() {
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
 
+            apply_shortcuts(app.handle())?;
+
             // Create the panel here (not from config) so a transient WebView2
             // failure — 0x800700AA right after a runtime update — can be
-            // retried instead of killing the whole app.
+            // retried; if the machine stays busy the app keeps running with
+            // tray + history capture and the panel can be created lazily.
             let panel = {
                 let mut built = None;
                 for attempt in 1..=5 {
@@ -81,25 +111,22 @@ pub fn run() {
                         }
                     }
                 }
-                built.ok_or("failed to create panel webview after retries")?
-            };
-
-            apply_shortcuts(app.handle())?;
-
-            // Panel behavior: auto-hide when it loses focus (clicking elsewhere,
-            // opening another app...), exactly like Paste on macOS.
-            let handle = app.handle().clone();
-            panel.on_window_event(move |event| {
-                if let WindowEvent::Focused(false) = event {
-                    if let Some(w) = handle.get_webview_window("panel") {
-                        let _ = w.hide();
+                match built {
+                    Some(w) => w,
+                    None => {
+                        eprintln!(
+                            "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry"
+                        );
+                        return Ok(());
                     }
                 }
-            });
+            };
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_initial,
+            commands::list_tray_icons,
             commands::list_clips,
             commands::paste_clip,
             commands::delete_clip,
@@ -176,12 +203,78 @@ pub fn apply_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>
 }
 
 /// Show/hide the main panel window.
-pub fn toggle_panel(app: &AppHandle) {
+/// Register the auto-hide-on-focus-loss behavior for the panel window.
+fn register_panel_autohide(app: &AppHandle) {
+    let handle = app.clone();
     if let Some(panel) = app.get_webview_window("panel") {
-        if panel.is_visible().unwrap_or(false) {
-            let _ = panel.hide();
-        } else {
-            show_panel(app, &panel);
+        panel.on_window_event(move |event| {
+            if let WindowEvent::Focused(false) = event {
+                if let Some(w) = handle.get_webview_window("panel") {
+                    let _ = w.hide();
+                }
+            }
+        });
+    }
+}
+
+/// Create the panel window with retries. Returns Err only after every
+/// attempt failed — the caller decides whether that is fatal (startup)
+/// or recoverable (lazy retry from the tray).
+fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let mut built = None;
+    let mut last_err = None;
+    for attempt in 1..=5 {
+        match tauri::WebviewWindowBuilder::new(
+            app,
+            "panel",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("Paste")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible(false)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .build()
+        {
+            Ok(w) => {
+                built = Some(w);
+                break;
+            }
+            Err(e) => {
+                eprintln!("[paste] panel create attempt {}/5 failed: {}", attempt, e);
+                last_err = Some(e);
+                std::thread::sleep(std::time::Duration::from_secs(4));
+            }
+        }
+    }
+    match built {
+        Some(w) => {
+            register_panel_autohide(app);
+            Ok(w)
+        }
+        None => Err(last_err.expect("at least one attempt")),
+    }
+}
+
+pub fn toggle_panel(app: &AppHandle) {
+    match app.get_webview_window("panel") {
+        Some(panel) => {
+            if panel.is_visible().unwrap_or(false) {
+                let _ = panel.hide();
+            } else {
+                show_panel(app, &panel);
+            }
+        }
+        None => {
+            // No panel yet (startup creation failed on a busy machine):
+            // retry now that the user is explicitly asking for it.
+            match create_panel(app) {
+                Ok(panel) => show_panel(app, &panel),
+                Err(e) => eprintln!("[paste] panel still unavailable: {}", e),
+            }
         }
     }
 }
@@ -268,6 +361,13 @@ fn monitor_area_for(_prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let paused = app.state::<AppState>().paused.load(Ordering::Relaxed);
+    let icon_name = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .unwrap()
+        .tray_icon
+        .clone();
     let open = MenuItem::with_id(app, "open", "Open Paste", true, None::<&str>)?;
     let pause = CheckMenuItem::with_id(
         app,
@@ -282,7 +382,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &pause, &settings_item, &quit])?;
 
     TrayIconBuilder::with_id("tray")
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(tray_icon_image(&icon_name))
         .tooltip("Paste")
         .menu(&menu)
         .show_menu_on_left_click(false)

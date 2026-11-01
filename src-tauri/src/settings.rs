@@ -30,6 +30,9 @@ pub struct AppSettings {
     /// scroll right) or "natural" (down = newer, scroll left).
     #[serde(default)]
     pub wheel_direction: String,
+    /// Tray icon variant id: classic | emerald | sunset | ocean | mono | pearl.
+    #[serde(default)]
+    pub tray_icon: String,
 }
 
 impl Default for AppSettings {
@@ -44,6 +47,7 @@ impl Default for AppSettings {
             autostart: false,
             panel_position: "center".into(),
             wheel_direction: "default".into(),
+            tray_icon: "classic".into(),
         }
     }
 }

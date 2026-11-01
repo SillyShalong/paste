@@ -332,6 +332,32 @@ html, body, #root {
 .detail-color { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
 .color-swatch.big { width: 100%; height: 160px; border-radius: 12px; border: 1px solid var(--border); }
 
+/* ---------- Tray icon picker (settings) ---------- */
+
+.tray-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+}
+.tray-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.tray-option:hover { border-color: var(--text-faint); }
+.tray-option.active { border-color: var(--accent); color: var(--text); }
+.tray-option img { width: 40px; height: 40px; border-radius: 8px; }
+
 /* ---------- About section (settings) ---------- */
 
 .about-head {

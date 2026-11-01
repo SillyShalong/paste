@@ -28,6 +28,26 @@ pub struct SourceInfo {
     pub color: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayIconOption {
+    pub id: String,
+    pub png_base64: String,
+}
+
+/// Preview images for the tray icon picker in the settings window.
+#[tauri::command]
+pub fn list_tray_icons() -> Vec<TrayIconOption> {
+    use base64::Engine as _;
+    crate::TRAY_ICON_SETS
+        .iter()
+        .map(|(id, png)| TrayIconOption {
+            id: id.to_string(),
+            png_base64: base64::engine::general_purpose::STANDARD.encode(png),
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn get_initial(app: AppHandle) -> InitialData {
     let state = app.state::<AppState>();
@@ -128,6 +148,7 @@ pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), Str
         *state.settings.lock().unwrap() = new_settings.clone();
     }
     crate::apply_shortcuts(&app).map_err(|e| e.to_string())?;
+    crate::apply_tray_icon(&app, &new_settings.tray_icon);
     // Keep autostart in sync with the toggle.
     use tauri_plugin_autostart::ManagerExt;
     let launcher = app.autolaunch();

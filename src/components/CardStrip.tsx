@@ -16,7 +16,17 @@ export default function CardStrip() {
 
   return (
     <div className="card-strip">
-      <div className="cards-row">
+      <div
+        className="cards-row"
+        onWheel={(e) => {
+          // vertical wheel scrolls the horizontal history strip; trackpad
+          // horizontal swipes (deltaX) pass through natively
+          const el = e.currentTarget;
+          const dy =
+            e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * el.clientWidth : e.deltaY;
+          el.scrollLeft += dy + e.deltaX;
+        }}
+      >
         {clips.map((clip, i) => (
           <ClipboardCard key={clip.id} clip={clip} index={i} selected={i === sel} />
         ))}

@@ -65,6 +65,19 @@ export default function SettingsApp() {
             <option value="light">Light</option>
           </select>
         </Row>
+        <Row
+          label="Panel position"
+          desc="Vertical placement — always on the screen you're working on"
+        >
+          <select
+            value={settings.panelPosition || "center"}
+            onChange={(e) => update({ panelPosition: e.target.value })}
+          >
+            <option value="center">Center of screen</option>
+            <option value="top">Top of screen</option>
+            <option value="bottom">Bottom of screen</option>
+          </select>
+        </Row>
       </section>
 
       <section className="settings-section">

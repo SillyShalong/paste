@@ -46,20 +46,56 @@ pub fn run() {
 
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
+
+            // Create the panel here (not from config) so a transient WebView2
+            // failure — 0x800700AA right after a runtime update — can be
+            // retried instead of killing the whole app.
+            let panel = {
+                let mut built = None;
+                for attempt in 1..=5 {
+                    match tauri::WebviewWindowBuilder::new(
+                        app,
+                        "panel",
+                        tauri::WebviewUrl::App("index.html".into()),
+                    )
+                    .title("Paste")
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .skip_taskbar(true)
+                    .resizable(false)
+                    .shadow(false)
+                    .build()
+                    {
+                        Ok(w) => {
+                            built = Some(w);
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[paste] panel create attempt {}/5 failed: {}",
+                                attempt, e
+                            );
+                            std::thread::sleep(std::time::Duration::from_secs(4));
+                        }
+                    }
+                }
+                built.ok_or("failed to create panel webview after retries")?
+            };
+
             apply_shortcuts(app.handle())?;
 
             // Panel behavior: auto-hide when it loses focus (clicking elsewhere,
             // opening another app...), exactly like Paste on macOS.
-            if let Some(panel) = app.get_webview_window("panel") {
-                let handle = app.handle().clone();
-                panel.on_window_event(move |event| {
-                    if let WindowEvent::Focused(false) = event {
-                        if let Some(w) = handle.get_webview_window("panel") {
-                            let _ = w.hide();
-                        }
+            let handle = app.handle().clone();
+            panel.on_window_event(move |event| {
+                if let WindowEvent::Focused(false) = event {
+                    if let Some(w) = handle.get_webview_window("panel") {
+                        let _ = w.hide();
                     }
-                });
-            }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -151,23 +187,83 @@ pub fn toggle_panel(app: &AppHandle) {
 }
 
 pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
-    // Span the full width of the primary monitor, vertically centered —
-    // the signature Paste layout.
+    let state = app.state::<AppState>();
+    let pos_pref = state.settings.lock().unwrap().panel_position.clone();
+
+    // Capture the foreground window BEFORE the panel takes focus — its
+    // monitor is where the user is working, so that's where the panel goes.
+    paste::capture_foreground(app);
+    let prev = *state.prev_hwnd.lock().unwrap();
+
+    #[cfg(windows)]
+    if let Some((mx, my, mw, mh)) = monitor_area_for(prev) {
+        // Land on the target monitor first so scale_factor() reflects it,
+        // then size and place the panel precisely.
+        let _ = panel.set_position(tauri::PhysicalPosition::new(mx, my));
+        let scale = panel.scale_factor().unwrap_or(1.0);
+        let target_h = (PANEL_HEIGHT * scale).round() as i32;
+        let margin = (12.0 * scale).round() as i32;
+        let y = match pos_pref.as_str() {
+            "top" => my + margin,
+            "bottom" => my + mh - target_h - margin,
+            _ => my + (mh - target_h) / 2,
+        };
+        let _ = panel.set_size(tauri::PhysicalSize::new(mw as u32, target_h as u32));
+        let _ = panel.set_position(tauri::PhysicalPosition::new(mx, y));
+    }
+    #[cfg(not(windows))]
     if let Ok(Some(monitor)) = panel.primary_monitor() {
         let scale = monitor.scale_factor();
         let size = monitor.size();
         let pos = monitor.position();
-        let phys_w = size.width;
-        let phys_h = size.height;
         let target_h = (PANEL_HEIGHT * scale).round() as i32;
-        let _ = panel.set_size(tauri::PhysicalSize::new(phys_w, target_h as u32));
-        let y = pos.y + (phys_h as i32 - target_h) / 2;
-        let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, y));
+        let _ = panel.set_size(tauri::PhysicalSize::new(size.width, target_h as u32));
+        let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
     }
-    paste::capture_foreground(app);
+
     let _ = panel.show();
     let _ = panel.set_focus();
     let _ = app.emit_to("panel", "panel:opened", ());
+}
+
+/// Physical monitor area (x, y, width, height) for the given window; falls
+/// back to the monitor under the cursor when the window is unknown.
+#[cfg(windows)]
+fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::Foundation::{HWND, POINT};
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST,
+    };
+    unsafe {
+        let hmon = match prev_hwnd {
+            Some(v) if v != 0 => MonitorFromWindow(HWND(v as *mut _), MONITOR_DEFAULTTONEAREST),
+            _ => {
+                let mut pt = POINT::default();
+                let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);
+                MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            }
+        };
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+            Some((
+                mi.rcMonitor.left,
+                mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left,
+                mi.rcMonitor.bottom - mi.rcMonitor.top,
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn monitor_area_for(_prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
+    None
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

@@ -32,6 +32,7 @@ export interface Settings {
   paused: boolean;
   autostart: boolean;
   theme: string;
+  panelPosition: string;
 }
 
 export interface SourceInfo {

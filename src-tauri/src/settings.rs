@@ -23,6 +23,9 @@ pub struct AppSettings {
     /// Launch at login.
     #[serde(default)]
     pub autostart: bool,
+    /// Vertical placement of the panel on its screen: "center" | "top" | "bottom".
+    #[serde(default)]
+    pub panel_position: String,
 }
 
 impl Default for AppSettings {
@@ -35,6 +38,7 @@ impl Default for AppSettings {
             excluded_apps: default_excluded_apps(),
             paused: false,
             autostart: false,
+            panel_position: "center".into(),
         }
     }
 }

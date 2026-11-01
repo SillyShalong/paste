@@ -30,6 +30,10 @@ export default function ClipboardCard({
       style={{ ["--source-color" as string]: color }}
       onMouseEnter={(e) => useStore.getState().setSel(index)}
       onClick={() => useStore.getState().paste()}
+      onDoubleClick={() => {
+        useStore.getState().setSel(index);
+        useStore.getState().openDetail();
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         useStore.getState().setSel(index);

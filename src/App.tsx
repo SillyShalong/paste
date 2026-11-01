@@ -18,6 +18,7 @@ export default function App() {
       const s = store.getState();
       if (s.query) s.setQuery("");
       s.setSel(0);
+      s.closeDetail();
       requestAnimationFrame(() => {
         document.querySelector<HTMLInputElement>(".search-input")?.focus();
       });
@@ -32,18 +33,39 @@ export default function App() {
       // let the IME consume keys while composing Chinese input
       if (e.isComposing || e.keyCode === 229) return;
       const s = store.getState();
+      const detailOpen = s.detailClipId != null;
       const inSearch =
         document.activeElement instanceof HTMLInputElement &&
         document.activeElement.classList.contains("search-input");
 
       if (e.key === "Escape") {
         e.preventDefault();
-        api.hidePanel();
+        if (detailOpen) {
+          s.closeDetail();
+        } else {
+          api.hidePanel();
+        }
         return;
       }
       if (e.ctrlKey && (e.key === "b" || e.key === "B")) {
         e.preventDefault();
         s.toggleSidebar();
+        return;
+      }
+      if (e.key === " " && !inSearch) {
+        // Space toggles the full-content preview for the selected card
+        e.preventDefault();
+        if (detailOpen) {
+          s.closeDetail();
+        } else {
+          s.openDetail();
+        }
+        return;
+      }
+      if (detailOpen && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
+        // the preview is open: vertical keys scroll its content
+        e.preventDefault();
+        scrollDetail(e.key);
         return;
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -57,6 +79,12 @@ export default function App() {
         }
         e.preventDefault();
         const sel = s.moveSel(e.key === "ArrowLeft" ? -1 : 1);
+        if (detailOpen) {
+          // keep the preview in sync while browsing cards
+          const clip = store.getState().clips[sel];
+          if (clip) useStore.setState({ detailClipId: clip.id });
+          else s.closeDetail();
+        }
         scrollToCard(sel);
         return;
       }
@@ -93,6 +121,19 @@ export default function App() {
   }, []);
 
   return <ClipboardPanel />;
+}
+
+function scrollDetail(key: string) {
+  const el = document.querySelector<HTMLElement>(".detail-content");
+  if (!el) return;
+  switch (key) {
+    case "ArrowDown": el.scrollBy({ top: 80 }); break;
+    case "ArrowUp": el.scrollBy({ top: -80 }); break;
+    case "PageDown": el.scrollBy({ top: 400 }); break;
+    case "PageUp": el.scrollBy({ top: -400 }); break;
+    case "Home": el.scrollTop = 0; break;
+    case "End": el.scrollTop = el.scrollHeight; break;
+  }
 }
 
 export function scrollToCard(index: number) {

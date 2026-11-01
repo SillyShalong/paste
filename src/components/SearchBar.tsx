@@ -37,7 +37,6 @@ export default function SearchBar() {
           placeholder="Search clipboard history…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          autoFocus
           spellCheck={false}
         />
         <button className="icon-btn" title={paused ? "Resume history" : "Pause history"} onClick={() => api.togglePause()}>

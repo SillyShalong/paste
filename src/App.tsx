@@ -19,9 +19,8 @@ export default function App() {
       if (s.query) s.setQuery("");
       s.setSel(0);
       s.closeDetail();
-      requestAnimationFrame(() => {
-        document.querySelector<HTMLInputElement>(".search-input")?.focus();
-      });
+      // Focus intentionally stays OFF the search input so Space toggles the
+      // full-content preview; typing any other character jumps into search.
     });
     events.onPauseChanged((paused) => useStore.setState({ paused }));
     events.onSettingsChanged((settings) => useStore.setState({ settings }));
@@ -112,7 +111,8 @@ export default function App() {
         return;
       }
       if (!inSearch && e.key.length === 1 && !e.ctrlKey && !e.altKey) {
-        // start typing anywhere → jump into the search box
+        // start typing anywhere → close the preview and jump into search
+        if (detailOpen) s.closeDetail();
         document.querySelector<HTMLInputElement>(".search-input")?.focus();
       }
     };

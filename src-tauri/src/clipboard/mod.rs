@@ -1,7 +1,5 @@
 pub mod capture;
 pub mod listener;
-#[cfg(target_os = "macos")]
-pub mod macos;
 pub mod set;
 
 /// A parsed clipboard snapshot, already classified into one of our clip kinds.

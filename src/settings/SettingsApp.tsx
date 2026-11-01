@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { api } from "../lib/api";
 import type { Pinboard, Settings } from "../types";
 
@@ -9,12 +10,14 @@ export default function SettingsApp() {
   const [newExe, setNewExe] = useState("");
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [pendingDelBoard, setPendingDelBoard] = useState<number | null>(null);
+  const [version, setVersion] = useState<string>("…");
 
   useEffect(() => {
     api.getInitial().then((d) => {
       setSettings(d.settings);
       setPinboards(d.pinboards);
     });
+    getVersion().then(setVersion).catch(() => setVersion("unknown"));
   }, []);
 
   const update = async (patch: Partial<Settings>) => {
@@ -229,12 +232,50 @@ export default function SettingsApp() {
         </div>
       </section>
 
+      <section className="settings-section">
+        <h2>About</h2>
+        <div className="about-head">
+          <img src="/app-icon.png" alt="Paste" className="about-icon" />
+          <div>
+            <div className="about-name">Paste for Windows</div>
+            <div className="about-version">Version {version}</div>
+          </div>
+        </div>
+        <Row label="Build" desc="Compiler profile this binary was built with">
+          <span className="about-value">
+            {import.meta.env.TAURI_ENV_DEBUG === "true" ? "Debug (dev)" : "Release (optimized)"}
+          </span>
+        </Row>
+        <Row label="Built at" desc="Timestamp of this build">
+          <span className="about-value">{formatBuildDate(__BUILD_DATE__)}</span>
+        </Row>
+        <Row label="Commit" desc="Source revision this build was produced from">
+          <span className="about-value mono">{__GIT_SHA__}</span>
+        </Row>
+        <Row label="Platform" desc="Operating system and CPU architecture">
+          <span className="about-value">
+            {import.meta.env.TAURI_ENV_OS || "windows"}{" "}
+            {import.meta.env.TAURI_ENV_PLATFORM_VERSION || ""} ·{" "}
+            {import.meta.env.TAURI_ENV_ARCH || "x86_64"}
+          </span>
+        </Row>
+      </section>
+
       <p style={{ color: "var(--text-faint)", fontSize: 11.5 }}>
         Paste for Windows — a desktop clipboard manager inspired by Paste for macOS.
         Data stays on this machine.
       </p>
     </div>
   );
+}
+
+function formatBuildDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} UTC${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
 }
 
 function Row({

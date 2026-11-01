@@ -22,7 +22,8 @@ export const api = {
     offset?: number;
   }) =>
     invoke<Clip[]>("list_clips", {
-      pinboardId: opts.pinboardId ?? undefined,
+      // null = plain history (unpinned only); a number = that pinboard.
+      pinboardId: opts.pinboardId ?? null,
       search: opts.search ?? "",
       kind: opts.kind ?? null,
       limit: opts.limit ?? 100,
@@ -50,6 +51,8 @@ export const api = {
   togglePause: () => invoke<boolean>("toggle_pause"),
   hidePanel: () => invoke<void>("hide_panel"),
   openSettings: () => invoke<void>("open_settings"),
+  /// macOS Accessibility permission for synthesizing paste keystrokes.
+  pastePermissionGranted: () => invoke<boolean>("paste_permission_granted"),
 };
 
 export const events = {

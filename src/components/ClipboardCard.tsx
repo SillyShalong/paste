@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store/useStore";
 import type { Clip } from "../types";
 import { api, convertFileSrc } from "../lib/api";
@@ -111,7 +111,7 @@ function ContextMenu({
   pinboards: { id: number; name: string }[];
   onClose: () => void;
 }) {
-  useEffectOnce(onClose);
+  useOutsideClose(onClose);
   return (
     <div
       className="context-menu"
@@ -119,8 +119,7 @@ function ContextMenu({
       // keep the window-level mousedown closer from firing for menu clicks
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-    >
-      <MenuItem label="Paste" onClick={() => { useStore.getState().paste(); onClose(); }} />
+    >      <MenuItem label="Paste" onClick={() => { useStore.getState().paste(); onClose(); }} />
       <MenuItem label="Paste as Plain Text" onClick={() => { useStore.getState().paste(true); onClose(); }} />
       <div className="menu-sep" />
       {pinboards.length > 0 ? (
@@ -162,14 +161,19 @@ function ContextMenu({
   );
 }
 
-function useEffectOnce(onClose: () => void) {
-  const handler = () => onClose();
-  window.addEventListener("mousedown", handler);
-  window.addEventListener("blur", handler);
-  return () => {
-    window.removeEventListener("mousedown", handler);
-    window.removeEventListener("blur", handler);
-  };
+/// Close the context menu on any outside mousedown or window blur. A real
+/// effect with cleanup — the previous render-time version leaked listeners
+/// on every re-render.
+function useOutsideClose(onClose: () => void) {
+  useEffect(() => {
+    const handler = () => onClose();
+    window.addEventListener("mousedown", handler);
+    window.addEventListener("blur", handler);
+    return () => {
+      window.removeEventListener("mousedown", handler);
+      window.removeEventListener("blur", handler);
+    };
+  }, [onClose]);
 }
 
 function MenuItem({

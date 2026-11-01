@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { api } from "../lib/api";
+import { isMac, modLabel } from "../lib/platform";
 import type { Pinboard, Settings } from "../types";
 
 export default function SettingsApp() {
@@ -11,6 +12,8 @@ export default function SettingsApp() {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [pendingDelBoard, setPendingDelBoard] = useState<number | null>(null);
   const [version, setVersion] = useState<string>("…");
+  // macOS only: paste keystroke injection needs the Accessibility permission.
+  const [pasteAllowed, setPasteAllowed] = useState(true);
 
   useEffect(() => {
     api.getInitial().then((d) => {
@@ -20,11 +23,23 @@ export default function SettingsApp() {
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
   }, []);
 
+  useEffect(() => {
+    if (isMac) api.pastePermissionGranted().then(setPasteAllowed);
+  }, []);
+
   const update = async (patch: Partial<Settings>) => {
     if (!settings) return;
+    const prev = settings;
     const next = { ...settings, ...patch };
     setSettings(next);
-    await api.setSettings(next);
+    try {
+      await api.setSettings(next);
+    } catch (e) {
+      // Revert the optimistic update and surface the failure (e.g. an
+      // unregisterable hotkey) instead of silently diverging from the app.
+      setSettings(prev);
+      alert(`Failed to apply settings: ${e}`);
+    }
   };
 
   if (!settings) return <div className="settings-root" />;
@@ -33,11 +48,24 @@ export default function SettingsApp() {
     <div className="settings-root">
       <h1>Paste Settings</h1>
 
+      {isMac && !pasteAllowed && (
+        <div className="settings-warning">
+          <span>
+            Pasting needs the Accessibility permission. Enable Paste under
+            System Settings → Privacy &amp; Security → Accessibility, then
+            restart the app.
+          </span>
+          <button onClick={() => api.pastePermissionGranted().then(setPasteAllowed)}>
+            Re-check
+          </button>
+        </div>
+      )}
+
       <section className="settings-section">
         <h2>General</h2>
         <Row
           label="Launch at login"
-          desc="Start Paste automatically when Windows starts"
+          desc={isMac ? "Start Paste automatically when you log in" : "Start Paste automatically when Windows starts"}
         >
           <Toggle on={settings.autostart} onChange={(v) => update({ autostart: v })} />
         </Row>
@@ -57,7 +85,7 @@ export default function SettingsApp() {
         </Row>
         <Row label="Appearance" desc="Panel theme">
           <select
-            value={settings.theme}
+            value={settings.theme ?? "system"}
             onChange={(e) => update({ theme: e.target.value })}
           >
             <option value="system">System</option>
@@ -73,7 +101,7 @@ export default function SettingsApp() {
           {recording ? (
             <input
               className="hotkey-box recording"
-              value="Press keys…"
+              value="Press keys… (include a modifier)"
               readOnly
               autoFocus
               onKeyDown={(e) => {
@@ -88,7 +116,7 @@ export default function SettingsApp() {
             />
           ) : (
             <button className="hotkey-box" onClick={() => setRecording(true)}>
-              {settings.hotkey.replace("CmdOrCtrl", "Ctrl")}
+              {settings.hotkey.replace("CmdOrCtrl", modLabel)}
             </button>
           )}
         </Row>
@@ -262,8 +290,8 @@ export default function SettingsApp() {
       </section>
 
       <p style={{ color: "var(--text-faint)", fontSize: 11.5 }}>
-        Paste for Windows — a desktop clipboard manager inspired by Paste for macOS.
-        Data stays on this machine.
+        Paste — a desktop clipboard manager inspired by Paste for macOS
+        {isMac ? " (Apple Silicon)" : " for Windows"}. Data stays on this machine.
       </p>
     </div>
   );
@@ -305,9 +333,12 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 }
 
 /// Convert a keydown event into a Tauri shortcut string like "CmdOrCtrl+Shift+V".
+/// Requires at least one modifier — an unmodified global hotkey would hijack
+/// that key system-wide.
 function comboFromEvent(e: React.KeyboardEvent): string | null {
   const key = e.key;
   if (["Control", "Shift", "Alt", "Meta"].includes(key)) return null;
+  if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) return null;
   const parts: string[] = [];
   if (e.ctrlKey || e.metaKey) parts.push("CmdOrCtrl");
   if (e.shiftKey) parts.push("Shift");

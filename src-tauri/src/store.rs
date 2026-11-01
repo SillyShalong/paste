@@ -204,8 +204,13 @@ pub fn list_clips(
         None => {}
     }
     if !search.is_empty() {
-        sql.push_str(" AND text LIKE '%' || ? || '%'");
-        args.push(Box::new(search.to_string()));
+        // Escape LIKE wildcards so "100%" or "a_b" match literally.
+        let escaped = search
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        sql.push_str(" AND text LIKE '%' || ? || '%' ESCAPE '\\'");
+        args.push(Box::new(escaped));
     }
     if let Some(k) = kind {
         sql.push_str(" AND kind = ?");
@@ -230,6 +235,13 @@ pub fn find_text_clip(conn: &Connection, text: &str) -> rusqlite::Result<Option<
     let mut stmt = conn.prepare(&sql)?;
     stmt.query_row(params![text], row_to_clip)
         .optional()
+}
+
+/// Fetch a single clip by id, whatever its pinboard state.
+pub fn get_clip(conn: &Connection, id: i64) -> rusqlite::Result<Option<Clip>> {
+    let sql = format!("SELECT {CLIP_COLS} FROM clips WHERE id = ?1");
+    let mut stmt = conn.prepare(&sql)?;
+    stmt.query_row(params![id], row_to_clip).optional()
 }
 
 /// Move a clip to the front of the history by updating its timestamp.
@@ -262,25 +274,6 @@ pub fn insert_clip(conn: &Connection, clip: &Clip) -> rusqlite::Result<i64> {
     Ok(conn.last_insert_rowid())
 }
 
-pub fn update_clip_content(conn: &Connection, id: i64, clip: &Clip) -> rusqlite::Result<()> {
-    conn.execute(
-        "UPDATE clips SET text=?2, html=?3, image_path=?4, files=?5, source_name=?6, \
-         source_path=?7, source_color=?8, source_icon=?9 WHERE id=?1",
-        params![
-            id,
-            clip.text,
-            clip.html,
-            clip.image_path,
-            clip.files,
-            clip.source_name,
-            clip.source_path,
-            clip.source_color,
-            clip.source_icon,
-        ],
-    )?;
-    Ok(())
-}
-
 pub fn delete_clip(conn: &Connection, id: i64) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM clips WHERE id = ?1", params![id])
 }
@@ -311,9 +304,15 @@ pub fn increment_paste_count(conn: &Connection, id: i64) -> rusqlite::Result<usi
     )
 }
 
-/// Delete all unpinned clips, keeping pinboarded ones. Returns rows deleted.
-pub fn clear_history(conn: &Connection) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM clips WHERE pinboard_id IS NULL", [])
+/// Delete all unpinned clips, keeping pinboarded ones. Returns the image
+/// files of the deleted rows so the caller can remove them from disk too.
+pub fn clear_history(conn: &Connection) -> rusqlite::Result<Vec<Option<String>>> {
+    let mut stmt = conn.prepare("SELECT image_path FROM clips WHERE pinboard_id IS NULL")?;
+    let paths = stmt
+        .query_map([], |r| r.get::<_, Option<String>>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    conn.execute("DELETE FROM clips WHERE pinboard_id IS NULL", [])?;
+    Ok(paths)
 }
 
 /// Enforce max_clips limit (oldest unpinned first). Returns ids deleted + files to clean.
@@ -370,17 +369,24 @@ pub fn list_pinboards(conn: &Connection) -> rusqlite::Result<Vec<Pinboard>> {
     rows.collect()
 }
 
-pub fn insert_pinboard(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
+/// Insert a pinboard and return the stored row (real position/created_at).
+pub fn insert_pinboard(conn: &Connection, name: &str) -> rusqlite::Result<Pinboard> {
     let pos: i64 = conn.query_row(
         "SELECT COALESCE(MAX(position), 0) + 1 FROM pinboards",
         [],
         |r| r.get(0),
     )?;
+    let now = time::now();
     conn.execute(
         "INSERT INTO pinboards (name, position, created_at) VALUES (?1, ?2, ?3)",
-        params![name, pos, time::now()],
+        params![name, pos, now],
     )?;
-    Ok(conn.last_insert_rowid())
+    Ok(Pinboard {
+        id: conn.last_insert_rowid(),
+        name: name.to_string(),
+        position: pos,
+        created_at: now,
+    })
 }
 
 pub fn rename_pinboard(conn: &Connection, id: i64, name: &str) -> rusqlite::Result<usize> {
@@ -401,5 +407,179 @@ mod time {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Fresh on-disk DB (WAL pragma needs a file) with a unique temp dir.
+    fn test_db() -> Connection {
+        let dir = std::env::temp_dir().join(format!(
+            "paste-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        open_db(&dir).unwrap()
+    }
+
+    fn clip(kind: ClipKind, text: Option<&str>, image_path: Option<&str>) -> Clip {
+        Clip {
+            id: 0,
+            kind,
+            text: text.map(str::to_string),
+            html: None,
+            image_path: image_path.map(str::to_string),
+            files: None,
+            source_name: "test".into(),
+            source_path: String::new(),
+            source_color: String::new(),
+            source_icon: String::new(),
+            pinboard_id: None,
+            created_at: 0,
+            paste_count: 0,
+        }
+    }
+
+    #[test]
+    fn insert_lists_newest_first() {
+        let conn = test_db();
+        for (i, word) in ["one", "two", "three"].iter().enumerate() {
+            let mut c = clip(ClipKind::Text, Some(word), None);
+            c.created_at = 100 + i as i64;
+            insert_clip(&conn, &c).unwrap();
+        }
+        let clips = list_clips(&conn, Some(None), "", None, 100, 0).unwrap();
+        assert_eq!(clips.len(), 3);
+        assert_eq!(clips[0].text.as_deref(), Some("three"));
+        assert_eq!(clips[2].text.as_deref(), Some("one"));
+    }
+
+    /// History view (Some(None)) must exclude pinboarded clips, a board view
+    /// must show only its own, and None (internal lookups) shows everything.
+    #[test]
+    fn pinboard_filters() {
+        let conn = test_db();
+        let board_id = insert_pinboard(&conn, "board").unwrap().id;
+
+        let mut free = clip(ClipKind::Text, Some("free"), None);
+        free.created_at = 1;
+        let free_id = insert_clip(&conn, &free).unwrap();
+        let mut pinned = clip(ClipKind::Text, Some("pinned"), None);
+        pinned.created_at = 2;
+        let pinned_id = insert_clip(&conn, &pinned).unwrap();
+        set_pinboard(&conn, pinned_id, Some(board_id)).unwrap();
+
+        let history = list_clips(&conn, Some(None), "", None, 100, 0).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, free_id);
+
+        let board = list_clips(&conn, Some(Some(board_id)), "", None, 100, 0).unwrap();
+        assert_eq!(board.len(), 1);
+        assert_eq!(board[0].id, pinned_id);
+
+        let all = list_clips(&conn, None, "", None, 100, 0).unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    /// % and _ must match literally (LIKE ESCAPE), not as wildcards.
+    #[test]
+    fn search_escapes_like_wildcards() {
+        let conn = test_db();
+        let mut a = clip(ClipKind::Text, Some("100%_done"), None);
+        a.created_at = 1;
+        insert_clip(&conn, &a).unwrap();
+        let mut b = clip(ClipKind::Text, Some("100x done"), None);
+        b.created_at = 2;
+        insert_clip(&conn, &b).unwrap();
+
+        let hits = list_clips(&conn, Some(None), "100%", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("100%_done"));
+
+        let hits = list_clips(&conn, Some(None), "100x", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("100x done"));
+    }
+
+    /// find_text_clip dedupes across text-bearing kinds, newest match first.
+    #[test]
+    fn find_text_clip_matches_newest() {
+        let conn = test_db();
+        let mut a = clip(ClipKind::Text, Some("dupe"), None);
+        a.created_at = 1;
+        insert_clip(&conn, &a).unwrap();
+        let mut b = clip(ClipKind::Link, Some("dupe"), None);
+        b.created_at = 2;
+        let b_id = insert_clip(&conn, &b).unwrap();
+
+        let found = find_text_clip(&conn, "dupe").unwrap().unwrap();
+        assert_eq!(found.id, b_id);
+        assert!(find_text_clip(&conn, "absent").unwrap().is_none());
+    }
+
+    /// clear_history removes only unpinned rows and reports their image
+    /// files so the caller can delete them from disk.
+    #[test]
+    fn clear_history_keeps_pinned_reports_images() {
+        let conn = test_db();
+        let board_id = insert_pinboard(&conn, "b").unwrap().id;
+        let mut unpinned = clip(ClipKind::Image, None, Some("C:/tmp/a.png"));
+        unpinned.created_at = 1;
+        insert_clip(&conn, &unpinned).unwrap();
+        let mut pinned = clip(ClipKind::Image, None, Some("C:/tmp/b.png"));
+        pinned.created_at = 2;
+        let pinned_id = insert_clip(&conn, &pinned).unwrap();
+        set_pinboard(&conn, pinned_id, Some(board_id)).unwrap();
+
+        let removed = clear_history(&conn).unwrap();
+        assert_eq!(removed, vec![Some("C:/tmp/a.png".to_string())]);
+
+        let rest = list_clips(&conn, None, "", None, 100, 0).unwrap();
+        assert_eq!(rest.len(), 1);
+        assert_eq!(rest[0].id, pinned_id);
+    }
+
+    /// enforce_limit removes the OLDEST unpinned rows beyond `max`.
+    #[test]
+    fn enforce_limit_drops_oldest() {
+        let conn = test_db();
+        for i in 1..=5i64 {
+            let mut c = clip(
+                ClipKind::Text,
+                Some(&format!("clip-{i}")),
+                if i == 1 { Some("old.png") } else { None },
+            );
+            c.created_at = i;
+            insert_clip(&conn, &c).unwrap();
+        }
+        let mut victims = enforce_limit(&conn, 3).unwrap();
+        victims.sort();
+        assert_eq!(victims.len(), 2);
+        // created_at 1 and 2 are the oldest; row 1 carries the image file.
+        assert_eq!(
+            victims,
+            vec![
+                (1, Some("old.png".to_string())),
+                (2, None),
+            ]
+        );
+    }
+
+    /// Pinboard rows come back with their real position/created_at.
+    #[test]
+    fn insert_pinboard_returns_stored_row() {
+        let conn = test_db();
+        let p1 = insert_pinboard(&conn, "first").unwrap();
+        let p2 = insert_pinboard(&conn, "second").unwrap();
+        assert_eq!(p1.position, 1);
+        assert_eq!(p2.position, 2);
+        assert!(p2.created_at >= p1.created_at);
+        assert_eq!(p2.name, "second");
     }
 }

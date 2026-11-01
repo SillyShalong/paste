@@ -25,7 +25,6 @@ interface StoreState {
   moveSel: (delta: number) => number;
   toggleSidebar: () => void;
   paste: (plain?: boolean) => Promise<void>;
-  pasteIndex: (index: number) => Promise<void>;
   deleteClip: (id?: number) => Promise<void>;
   pinSelected: () => Promise<void>;
   clearHistory: () => Promise<void>;
@@ -118,12 +117,6 @@ export const useStore = create<StoreState>((set, get) => ({
     const clip = clips[sel];
     if (!clip) return;
     await api.pasteClip(clip.id, plain);
-  },
-
-  pasteIndex: async (index) => {
-    const clip = get().clips[index - 1];
-    if (!clip) return;
-    await api.pasteClip(clip.id, false);
   },
 
   deleteClip: async (id) => {

@@ -32,6 +32,23 @@
   --card-bg-hover: rgba(255, 255, 255, 0.95);
 }
 
+/* Explicit dark theme — declared on the .panel element these values win over
+   the inherited :root values, so "Dark" also works while the system is light. */
+[data-theme="dark"] {
+  --bg: rgba(26, 26, 31, 0.86);
+  --bg-solid: #1a1a1f;
+  --bg-elevated: rgba(255, 255, 255, 0.06);
+  --bg-elevated-strong: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f2f2f5;
+  --text-dim: rgba(242, 242, 245, 0.55);
+  --text-faint: rgba(242, 242, 245, 0.35);
+  --accent: #4f8ef7;
+  --danger: #ff6363;
+  --card-bg: rgba(255, 255, 255, 0.055);
+  --card-bg-hover: rgba(255, 255, 255, 0.09);
+}
+
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     --bg: rgba(246, 246, 249, 0.88);
@@ -48,6 +65,32 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* macOS accessibility-permission banner in the settings window */
+.settings-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 197, 66, 0.45);
+  background: rgba(255, 197, 66, 0.12);
+  color: #ffc542;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.settings-warning button {
+  flex: none;
+  padding: 4px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 197, 66, 0.5);
+  background: transparent;
+  color: #ffc542;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-warning button:hover { background: rgba(255, 197, 66, 0.15); }
 
 html, body, #root {
   width: 100%;

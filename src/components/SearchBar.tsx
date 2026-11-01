@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../store/useStore";
 import type { ClipKind } from "../types";
 import { api } from "../lib/api";
+import { modLabel } from "../lib/platform";
 import ConfirmPopover from "./ConfirmPopover";
 
 const FILTERS: { key: ClipKind | "all"; label: string }[] = [
@@ -60,7 +61,7 @@ export default function SearchBar() {
         ))}
         <div className="spacer" />
         <ClearHistoryChip />
-        <span className="app-label">{settings?.hotkey.replace("CmdOrCtrl", "Ctrl")}</span>
+        <span className="app-label">{settings?.hotkey.replace("CmdOrCtrl", modLabel)}</span>
       </div>
     </div>
   );

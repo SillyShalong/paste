@@ -1,0 +1,92 @@
+name: Tests & macOS (Apple Silicon)
+
+on:
+  push:
+    branches: [main, dev]
+    paths-ignore:
+      - "**.md"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Fast regression net for both platforms: typecheck + unit tests.
+  check-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Frontend typecheck
+        run: npx tsc --noEmit
+      - name: Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # macos-14 runners are M1 (Apple Silicon). This is the only way to compile
+  # the macOS backend without owning a Mac — it type-checks macos.rs and the
+  # whole cfg(target_os = "macos") tree against the real target.
+  check-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Frontend typecheck
+        run: npx tsc --noEmit
+      - name: Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Rust check (aarch64-apple-darwin)
+        run: cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
+
+  # Full macOS app bundle, on demand or on version tags.
+  build-macos:
+    needs: [check-windows, check-macos]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Build macOS app (aarch64)
+        run: npx tauri build --target aarch64-apple-darwin --bundles app,dmg
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paste-macos-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+
+      # Tags additionally publish the .dmg on a GitHub Release.
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          generate_release_notes: true

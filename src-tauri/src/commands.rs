@@ -36,7 +36,8 @@ pub fn get_initial(app: AppHandle) -> InitialData {
     let data = InitialData {
         settings,
         pinboards: store::list_pinboards(&db).unwrap_or_default(),
-        clips: store::list_clips(&db, None, "", None, 100, 0).unwrap_or_default(),
+        // History view: unpinned clips only (mirrors live-update filtering).
+        clips: store::list_clips(&db, Some(None), "", None, 100, 0).unwrap_or_default(),
         sources: store::distinct_sources(&db)
             .unwrap_or_default()
             .into_iter()
@@ -50,7 +51,10 @@ pub fn get_initial(app: AppHandle) -> InitialData {
 #[tauri::command]
 pub fn list_clips(
     app: AppHandle,
-    pinboard_id: Option<Option<i64>>,
+    // None = plain history (unpinned clips only); Some(id) = that pinboard.
+    // (Tauri IPC can only express Option<i64> from JS, so the "everything"
+    // mode of the store layer is intentionally not reachable here.)
+    pinboard_id: Option<i64>,
     search: Option<String>,
     kind: Option<String>,
     limit: Option<i64>,
@@ -60,7 +64,7 @@ pub fn list_clips(
     let db = state.db.lock().unwrap();
     store::list_clips(
         &db,
-        pinboard_id,
+        Some(pinboard_id),
         search.as_deref().unwrap_or(""),
         kind.as_deref().and_then(ClipKind::from_str),
         limit.unwrap_or(100),
@@ -74,26 +78,30 @@ pub fn paste_clip(app: AppHandle, id: i64, plain: Option<bool>) -> bool {
     let state = app.state::<AppState>();
     let clip = {
         let db = state.db.lock().unwrap();
-        store::list_clips(&db, None, "", None, 10_000, 0)
-            .unwrap_or_default()
-            .into_iter()
-            .find(|c| c.id == id)
+        store::get_clip(&db, id).ok().flatten()
     };
     let Some(clip) = clip else { return false };
 
-    paste::paste_clip(&app, &clip, plain.unwrap_or(false))
+    // The paste sequence contains sleeps (focus settle, skip-capture grace).
+    // Run it off the main thread so the UI event loop never blocks; the bool
+    // result only reports that the paste was dispatched.
+    let plain = plain.unwrap_or(false);
+    std::thread::Builder::new()
+        .name("paste".into())
+        .spawn(move || {
+            paste::paste_clip(&app, &clip, plain);
+        })
+        .is_ok()
 }
 
 #[tauri::command]
 pub fn delete_clip(app: AppHandle, id: i64) -> bool {
     let state = app.state::<AppState>();
     let db = state.db.lock().unwrap();
-    // Clean up image files belonging to the clip.
-    if let Ok(clips) = store::list_clips(&db, None, "", None, 1_000_000, 0) {
-        if let Some(c) = clips.iter().find(|c| c.id == id) {
-            if let Some(p) = &c.image_path {
-                let _ = std::fs::remove_file(p);
-            }
+    // Clean up the image file belonging to the clip.
+    if let Ok(Some(c)) = store::get_clip(&db, id) {
+        if let Some(p) = &c.image_path {
+            let _ = std::fs::remove_file(p);
         }
     }
     store::delete_clip(&db, id).is_ok()
@@ -110,7 +118,16 @@ pub fn toggle_pin(app: AppHandle, id: i64, pinboard_id: Option<i64>) -> bool {
 pub fn clear_history(app: AppHandle) -> bool {
     let state = app.state::<AppState>();
     let db = state.db.lock().unwrap();
-    store::clear_history(&db).is_ok()
+    match store::clear_history(&db) {
+        Ok(image_paths) => {
+            // Remove the PNG files of deleted clips (orphan cleanup).
+            for p in image_paths.into_iter().flatten() {
+                let _ = std::fs::remove_file(p);
+            }
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 #[tauri::command]
@@ -121,17 +138,23 @@ pub fn get_settings(app: AppHandle) -> AppSettings {
 #[tauri::command]
 pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let autostart = new_settings.autostart;
-    {
-        let db = state.db.lock().unwrap();
-        settings::save(&db, &new_settings);
-        *state.settings.lock().unwrap() = new_settings.clone();
+    let old_settings = state.settings.lock().unwrap().clone();
+
+    // Apply shortcuts BEFORE persisting: if the new hotkey can't be
+    // registered (e.g. taken by another app), restore the previous ones
+    // instead of leaving the app with no working global shortcut.
+    *state.settings.lock().unwrap() = new_settings.clone();
+    if let Err(e) = crate::apply_shortcuts(&app) {
+        *state.settings.lock().unwrap() = old_settings;
+        let _ = crate::apply_shortcuts(&app);
+        return Err(format!("could not register shortcut: {e}"));
     }
-    crate::apply_shortcuts(&app).map_err(|e| e.to_string())?;
+
+    settings::save(&state.db.lock().unwrap(), &new_settings);
     // Keep autostart in sync with the toggle.
     use tauri_plugin_autostart::ManagerExt;
     let launcher = app.autolaunch();
-    let _ = if autostart {
+    let _ = if new_settings.autostart {
         launcher.enable()
     } else {
         launcher.disable()
@@ -149,13 +172,7 @@ pub fn set_pinboard(app: AppHandle, id: i64, pinboard_id: Option<i64>) -> bool {
 pub fn create_pinboard(app: AppHandle, name: String) -> Option<Pinboard> {
     let state = app.state::<AppState>();
     let db = state.db.lock().unwrap();
-    let id = store::insert_pinboard(&db, &name).ok()?;
-    Some(Pinboard {
-        id,
-        name,
-        position: 0,
-        created_at: 0,
-    })
+    store::insert_pinboard(&db, &name).ok()
 }
 
 #[tauri::command]
@@ -195,12 +212,14 @@ pub fn toggle_pause_cmd(app: &AppHandle) -> Result<bool, String> {
     let state = app.state::<AppState>();
     let new_val = !state.paused.load(Ordering::Relaxed);
     state.paused.store(new_val, Ordering::Relaxed);
-    {
+    let s = {
         let mut s = state.settings.lock().unwrap();
         s.paused = new_val;
-        let db = state.db.lock().unwrap();
-        settings::save(&db, &s);
-    }
+        s.clone()
+    };
+    // Keep the settings and db lock scopes disjoint so lock order can
+    // never invert against other code paths.
+    settings::save(&state.db.lock().unwrap(), &s);
     crate::refresh_tray(app);
     let _ = app.emit("pause:changed", new_val);
     Ok(new_val)
@@ -224,4 +243,18 @@ pub async fn open_settings(app: AppHandle) {
 /// Internal (not an IPC command): paste the index-th most recent clip.
 pub fn quick_paste_index(app: &AppHandle, index: i64) {
     paste::quick_paste_index(app, index);
+}
+
+/// Whether the OS lets us synthesize paste keystrokes. macOS gates Cmd+V
+/// injection behind the Accessibility permission; other platforms: always.
+#[tauri::command]
+pub fn paste_permission_granted() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::ax_trusted()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
 }

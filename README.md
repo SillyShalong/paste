@@ -1,10 +1,10 @@
-# Paste for Windows
+# Paste
 
-A Windows clipboard manager modeled on [Paste for macOS](https://pasteapp.io) —
+A clipboard manager modeled on [Paste for macOS](https://pasteapp.io) —
 unlimited clipboard history in a visual card strip, summoned anywhere with a
 global hotkey. Built with Tauri 2 (Rust + React + TypeScript).
 
-![stack](https://img.shields.io/badge/platform-Windows%2010%2F11-blue) ![rust](https://img.shields.io/badge/backend-Rust-orange) ![react](https://img.shields.io/badge/frontend-React%2018-61dafb)
+![stack](https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20macOS%2011%2B%20(Apple%20Silicon)-blue) ![rust](https://img.shields.io/badge/backend-Rust-orange) ![react](https://img.shields.io/badge/frontend-React%2018-61dafb)
 
 ## Features
 
@@ -12,18 +12,19 @@ global hotkey. Built with Tauri 2 (Rust + React + TypeScript).
   files, and hex colors, all stored locally in SQLite
 - **Paste-style card strip** — full-width translucent panel, newest cards on
   the left, each tagged with the source app's icon and brand color
-- **Global hotkey** `Ctrl+Shift+V` (remappable) to toggle the panel anywhere
-- **Quick paste** `Ctrl+1…9` — paste the most recent clips without opening
-  the panel
+- **Global hotkey** `Ctrl+Shift+V` on Windows / `Cmd+Shift+V` on macOS
+  (remappable) to toggle the panel anywhere
+- **Quick paste** `Ctrl+1…9` on Windows, `Cmd+1…9` on macOS — paste the most
+  recent clips without opening the panel
 - **Keyboard-first** — `←`/`→` navigate, `Enter` paste,
-  `Ctrl+Enter` paste as plain text, `Ctrl+P` pin, `Del` delete,
+  `Ctrl/Cmd+Enter` paste as plain text, `Ctrl/Cmd+P` pin, `Del` delete,
   `Tab` cycle filters, `Esc` close
 - **Pinboards** — keep frequently used snippets permanently, organized into
   boards in the sidebar
 - **Power search** — full-text search across the whole history plus per-type
   filters (text / links / images / files / colors)
 - **Source app detection** — every clip records which app it was copied from
-  (icon + brand color extracted from the exe)
+  (icon + brand color extracted from the binary)
 - **Privacy** — nothing leaves the machine; excluded-app list skips password
   managers (1Password, Bitwarden, KeePass…) by default; pause capture any
   time from the tray
@@ -61,14 +62,51 @@ src-tauri/src/           Rust backend
   commands.rs            Tauri IPC surface
 ```
 
+## macOS port (Apple Silicon, M-series)
+
+macOS 11+ on Apple Silicon is a first-class target. Per-platform pieces:
+
+```
+src-tauri/src/
+  macos.rs               hand-rolled msg_send! bindings: NSPasteboard read/write,
+                         NSWorkspace frontmost app + icon, NSRunningApplication
+                         activation, CGEvent Cmd+V injection, AX permission check
+  clipboard/listener.rs  Windows: message-only window (event-driven);
+                         macOS: NSPasteboard.changeCount polling (thread-safe)
+  clipboard/capture.rs   Windows: CF_* flavors; macOS: UTI flavors via NSPasteboard
+  clipboard/set.rs       writes any clip kind back (Win32 / NSPasteboard)
+  appinfo.rs             foreground app → icon → brand color (Win32 / NSWorkspace)
+  paste.rs               focus restore (AttachThreadInput / activateFromOptions)
+                         + keystroke synthesis (SendInput Ctrl+V / CGEvent Cmd+V)
+```
+
+Design notes:
+
+- **No private APIs.** Clipboard capture polls `changeCount` (150 ms) on a
+  dedicated thread; `NSPasteboard` is documented thread-safe.
+- **Main-thread discipline.** `NSWorkspace`/`NSImage` calls are dispatched to
+  the main thread via `state::on_main_sync` (inline-safe when already there).
+- **Accessibility permission** is required for pasting: `CGEventPost` is
+  blocked until the user trusts the app under *System Settings → Privacy &
+  Security → Accessibility*. The Settings window shows a banner
+  (`paste_permission_granted` IPC) until granted.
+- Hotkeys follow platform convention: the panel hotkey default
+  `CmdOrCtrl+Shift+V` maps to `Cmd+Shift+V`; quick paste registers
+  `Cmd+1…9` (`Modifiers::SUPER`) instead of `Ctrl+1…9`.
+- Frontend is shared; labels switch `Ctrl`/`Cmd` via `src/lib/platform.ts`.
+
+Build on an M-series Mac:
+
+```bash
+npm install
+npm run tauri build -- --target aarch64-apple-darwin
+# → .app and .dmg in src-tauri/target/aarch64-apple-darwin/release/bundle/
+```
+
+(macOS compilation must run on a Mac — the host cannot cross-compile the
+AppKit wiring from Windows.)
+
 ## Not in scope (v1)
 
 OCR search, Paste Stack, MCP/AI integration, cross-device sync — the same
-scope cuts the original plan made for the Windows port.
-
-## macOS port
-
-The React frontend is platform-neutral. Porting = adding
-`clipboard/listener_mac.rs` (NSPasteboard changeCount polling), swapping the
-foreground-app lookup to NSWorkspace, and adapting the hotkey/window behavior
-to macOS conventions.
+scope cuts the original plan made for the desktop ports.

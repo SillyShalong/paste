@@ -1,6 +1,7 @@
-//! Writing content back to the Windows clipboard (used when pasting a
-//! history item or copying it without pasting).
+//! Writing content back to the clipboard (used when pasting a history item
+//! or copying it without pasting).
 
+#[cfg(windows)]
 use super::capture::png_to_dib;
 use super::ClipContent;
 
@@ -85,23 +86,49 @@ pub fn set_clipboard(content: &ClipContent) -> bool {
     }
 }
 
-#[cfg(not(windows))]
+/// macOS (Apple Silicon): write via NSPasteboard (thread-safe).
+#[cfg(target_os = "macos")]
+pub fn set_clipboard(content: &ClipContent) -> bool {
+    use crate::macos;
+
+    if !macos::clear_contents() {
+        return false;
+    }
+    match content {
+        ClipContent::Text { text, html } | ClipContent::Link { text, html } => {
+            if !macos::write_string(text, macos::UTI_TEXT) {
+                return false;
+            }
+            if let Some(html) = html {
+                if !macos::write_string(html, macos::UTI_HTML) {
+                    return false;
+                }
+            }
+            true
+        }
+        ClipContent::Color { text } => macos::write_string(text, macos::UTI_TEXT),
+        ClipContent::Image { png } => macos::write_data(png, macos::UTI_PNG),
+        ClipContent::Files { paths } => macos::write_files(paths),
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn set_clipboard(_content: &ClipContent) -> bool {
     false
 }
 
 /// Build a CF_HTML payload with a correct header for the given fragment.
-fn build_cf_html(fragment: &str) -> Vec<u8> {
+pub(crate) fn build_cf_html(fragment: &str) -> Vec<u8> {
     let header_len = 105; // fixed header block length we emit below
-    let mut body = String::new();
-    body.push_str("<html><body>\n<!--StartFragment-->");
-    body.push_str(fragment);
-    body.push_str("<!--EndFragment-->\n</body></html>");
+    let open = "<html><body>\n<!--StartFragment-->";
+    let close = "<!--EndFragment-->\n</body></html>";
 
     let start_html = header_len;
-    let start_fragment = start_html + "<html><body>\n".len();
+    // Fragment offsets must point at the actual fragment content, i.e.
+    // AFTER the StartFragment marker (verified by the round-trip test).
+    let start_fragment = start_html + open.len();
     let end_fragment = start_fragment + fragment.len();
-    let end_html = start_html + body.len();
+    let end_html = end_fragment + close.len();
 
     let header = format!(
         "Version:0.9\r\nStartHTML:{start_html:09}\r\nEndHTML:{end_html:09}\r\n\
@@ -112,7 +139,9 @@ fn build_cf_html(fragment: &str) -> Vec<u8> {
     if out.len() < header_len {
         out.resize(header_len, b' ');
     }
-    out.extend_from_slice(body.as_bytes());
+    out.extend_from_slice(open.as_bytes());
+    out.extend_from_slice(fragment.as_bytes());
+    out.extend_from_slice(close.as_bytes());
     out
 }
 

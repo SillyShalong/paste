@@ -90,13 +90,32 @@ fn listener_thread() {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn listener_thread() {
     loop {
         std::thread::park();
     }
 }
 
+/// macOS: no public clipboard-change notification without private APIs, so
+/// poll NSPasteboard.changeCount (documented thread-safe) — the standard
+/// approach used by open-source clipboard managers (Maccy etc.).
+#[cfg(target_os = "macos")]
+fn listener_thread() {
+    use crate::macos;
+
+    let mut last = macos::change_count();
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let now = macos::change_count();
+        if now != last {
+            last = now;
+            on_clipboard_update();
+        }
+    }
+}
+
+#[cfg(windows)]
 fn utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -170,16 +189,16 @@ fn on_clipboard_update() {
     let db = state.db.lock().unwrap();
 
     // Dedupe: identical text content that already exists moves to the front;
-    // a consecutive duplicate of any kind is ignored entirely.
+    // a consecutive duplicate of any kind is ignored entirely. Text matching
+    // ignores kind — the same string classified differently across captures
+    // (e.g. a pasted-in color code) should not create duplicate entries.
     if let Some(t) = &text {
         if let Ok(Some(existing)) = store::find_text_clip(&db, t) {
-            if existing.kind == kind {
-                let _ = store::touch_clip(&db, existing.id, now);
-                let mut moved = existing;
-                moved.created_at = now;
-                let _ = app.emit_to("panel", "clipboard:new", &moved);
-                return;
-            }
+            let _ = store::touch_clip(&db, existing.id, now);
+            let mut moved = existing;
+            moved.created_at = now;
+            let _ = app.emit_to("panel", "clipboard:new", &moved);
+            return;
         }
     }
     if let Ok(newest) = store::list_clips(&db, None, "", None, 1, 0) {

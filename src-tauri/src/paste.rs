@@ -1,5 +1,5 @@
 //! Pasting a history item into the previously focused application:
-//! restore focus → write clipboard → synthesize Ctrl+V.
+//! restore focus → write clipboard → synthesize Ctrl+V / Cmd+V.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -25,7 +25,12 @@ pub fn capture_foreground(app: &AppHandle) {
 /// still owns the foreground (Windows only allows the foreground process to
 /// call SetForegroundWindow), then the panel hides, then the keystroke fires.
 pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
-    let content = clip_to_content(clip, plain_text);
+    // If the image file is gone (or content unreadable), abort instead of
+    // clobbering the user's clipboard with an empty string.
+    let Some(content) = clip_to_content(clip, plain_text) else {
+        eprintln!("[paste] clip id={} has no readable content; aborting", clip.id);
+        return false;
+    };
     let state = app.state::<AppState>();
     {
         // Ignore the clipboard-change event our own write triggers.
@@ -35,7 +40,11 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
         }
     }
     let target = *state.prev_hwnd.lock().unwrap();
+    // Windows tracks a raw HWND; macOS tracks a PID — same isize slot.
+    #[cfg(windows)]
     let restore = target.is_some() && is_window(hwnd_from_isize(target.unwrap()));
+    #[cfg(not(windows))]
+    let restore = target.is_some() && is_window(target.unwrap());
 
     eprintln!(
         "[paste] paste_clip id={} kind={:?} set_ok=true restore={} target={:#x}",
@@ -50,7 +59,7 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
         Err(e) => eprintln!("[paste] increment_paste_count failed: {e}"),
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     if restore {
         restore_foreground(target.unwrap());
     }
@@ -143,42 +152,58 @@ fn restore_foreground(target: isize) {
     }
 }
 
+/// Bring the target app back to the foreground on macOS: activate the app
+/// that owned `target` (a PID) before the panel opened.
+#[cfg(target_os = "macos")]
+fn restore_foreground(target: isize) {
+    let ok = unsafe { crate::macos::activate_pid(target) };
+    eprintln!("[paste] restore_foreground pid={target:#x} ok={ok}");
+    std::thread::sleep(Duration::from_millis(120));
+}
+
 /// Quick paste from a global shortcut (panel not involved): target is the
-/// currently focused window.
+/// currently focused window. The target HWND is captured synchronously on the
+/// shortcut thread; the clipboard write + keystroke sequence (which sleeps)
+/// runs off-thread so the UI never blocks.
 pub fn quick_paste_index(app: &AppHandle, index: i64) {
     let state = app.state::<AppState>();
     let clips = {
         let db = state.db.lock().unwrap();
-        store::list_clips(&db, None, "", None, index as i64, 0)
-            .unwrap_or_default()
+        // Mirror the History view: unpinned clips only.
+        store::list_clips(&db, Some(None), "", None, index, 0).unwrap_or_default()
     };
     let Some(clip) = clips.get(index as usize - 1).cloned() else {
         return;
     };
     let target = foreground_window();
-    let content = clip_to_content(&clip, state.settings.lock().unwrap().always_plain_text);
-    {
-        let _guard = SkipCaptureGuard::new(&state.skip_capture);
-        if !clipboard::set::set_clipboard(&content) {
-            return;
-        }
-    }
-    let _ = store::increment_paste_count(&state.db.lock().unwrap(), clip.id);
-    send_paste_to(true, target);
-}
-
-fn clip_to_content(clip: &Clip, plain_text: bool) -> ClipContent {
-    match clip.kind {
-        ClipKind::Image => {
-            if let Some(path) = &clip.image_path {
-                if let Ok(png) = std::fs::read(path) {
-                    return ClipContent::Image { png };
+    let plain = state.settings.lock().unwrap().always_plain_text;
+    let app = app.clone();
+    std::thread::Builder::new()
+        .name("quick-paste".into())
+        .spawn(move || {
+            let Some(content) = clip_to_content(&clip, plain) else {
+                return;
+            };
+            let state = app.state::<AppState>();
+            {
+                let _guard = SkipCaptureGuard::new(&state.skip_capture);
+                if !clipboard::set::set_clipboard(&content) {
+                    return;
                 }
             }
-            ClipContent::Text {
-                text: String::new(),
-                html: None,
-            }
+            let _ = store::increment_paste_count(&state.db.lock().unwrap(), clip.id);
+            send_paste_to(true, target);
+        })
+        .ok();
+}
+
+/// Build the clipboard payload for a clip. Returns None when the content is
+/// gone (e.g. the image file was deleted), so callers can abort cleanly.
+fn clip_to_content(clip: &Clip, plain_text: bool) -> Option<ClipContent> {
+    match clip.kind {
+        ClipKind::Image => {
+            let png = std::fs::read(clip.image_path.as_ref()?).ok()?;
+            Some(ClipContent::Image { png })
         }
         ClipKind::File => {
             let paths: Vec<String> = clip
@@ -186,19 +211,19 @@ fn clip_to_content(clip: &Clip, plain_text: bool) -> ClipContent {
                 .as_deref()
                 .and_then(|f| serde_json::from_str(f).ok())
                 .unwrap_or_default();
-            ClipContent::Files { paths }
+            Some(ClipContent::Files { paths })
         }
-        ClipKind::Link => ClipContent::Link {
+        ClipKind::Link => Some(ClipContent::Link {
             text: clip.text.clone().unwrap_or_default(),
             html: if plain_text { None } else { clip.html.clone() },
-        },
-        ClipKind::Color => ClipContent::Color {
+        }),
+        ClipKind::Color => Some(ClipContent::Color {
             text: clip.text.clone().unwrap_or_default(),
-        },
-        ClipKind::Text => ClipContent::Text {
+        }),
+        ClipKind::Text => Some(ClipContent::Text {
             text: clip.text.clone().unwrap_or_default(),
             html: if plain_text { None } else { clip.html.clone() },
-        },
+        }),
     }
 }
 
@@ -251,7 +276,23 @@ fn send_paste_to(restore: bool, target: Option<isize>) {
             SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        use crate::macos;
+        if restore {
+            if let Some(pid) = target {
+                unsafe {
+                    macos::activate_pid(pid);
+                }
+                // Give the target app a beat to process the activation.
+                std::thread::sleep(Duration::from_millis(120));
+            }
+        }
+        unsafe {
+            macos::post_cmd_v();
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (restore, target);
     }
@@ -275,7 +316,15 @@ fn foreground_window() -> Option<isize> {
     }
 }
 
-#[cfg(not(windows))]
+/// macOS: the frontmost app's PID. NSWorkspace is main-thread-only, so this
+/// dispatches through `on_main_sync` (inline when already on the main
+/// thread, e.g. when called from the global-shortcut handler).
+#[cfg(target_os = "macos")]
+fn foreground_window() -> Option<isize> {
+    crate::state::on_main_sync(|| unsafe { crate::macos::frontmost_pid() }).flatten()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn foreground_window() -> Option<isize> {
     None
 }
@@ -286,7 +335,12 @@ fn is_window(hwnd: windows::Win32::Foundation::HWND) -> bool {
     unsafe { IsWindow(hwnd).as_bool() }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn is_window(pid: isize) -> bool {
+    crate::macos::pid_alive(pid)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn is_window(_: isize) -> bool {
     false
 }

@@ -8,21 +8,46 @@ const CF_UNICODETEXT: u32 = 13;
 const CF_DIB: u32 = 8;
 const CF_HDROP: u32 = 15;
 
+/// Copy a clipboard global handle's memory. The caller must hold the
+/// clipboard open.
+#[cfg(windows)]
+unsafe fn hglobal_bytes(handle: windows::Win32::Foundation::HANDLE) -> Option<Vec<u8>> {
+    use windows::Win32::Foundation::HGLOBAL;
+    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+    let hglobal = HGLOBAL(handle.0);
+    let ptr = GlobalLock(hglobal);
+    if ptr.is_null() {
+        return None;
+    }
+    let size = GlobalSize(hglobal);
+    let bytes = std::slice::from_raw_parts(ptr as *const u8, size).to_vec();
+    GlobalUnlock(hglobal);
+    Some(bytes)
+}
+
+/// Decode a null-terminated UTF-16 byte buffer (Windows CF_UNICODETEXT).
+#[cfg(windows)]
+fn utf16_to_string(bytes: Vec<u8>) -> String {
+    let u16s: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .take_while(|&u| u != 0)
+        .collect();
+    String::from_utf16_lossy(&u16s)
+}
+
 #[cfg(windows)]
 pub fn read_clipboard() -> Option<ClipContent> {
-    use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard};
-    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 
     // Opening the clipboard can transiently fail while another process holds
     // it; retry briefly.
     let mut opened = false;
     for _ in 0..10 {
-        unsafe {
-            if OpenClipboard(None).is_ok() {
-                opened = true;
-                break;
-            }
+        if unsafe { OpenClipboard(None) }.is_ok() {
+            opened = true;
+            break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
@@ -35,60 +60,41 @@ pub fn read_clipboard() -> Option<ClipContent> {
 
         // 1. Files (highest priority — Explorer copies carry text too)
         if let Ok(handle) = GetClipboardData(CF_HDROP) {
-            let hglobal = windows::Win32::Foundation::HGLOBAL(handle.0);
-            let ptr = GlobalLock(hglobal);
-            if !ptr.is_null() {
-                let size = GlobalSize(hglobal);
-                let bytes = std::slice::from_raw_parts(ptr as *const u8, size);
-                if let Some(paths) = parse_hdrop(bytes) {
+            if let Some(bytes) = hglobal_bytes(handle) {
+                if let Some(paths) = parse_hdrop(&bytes) {
                     if !paths.is_empty() {
                         out = Some(ClipContent::Files { paths });
                     }
                 }
-                GlobalUnlock(hglobal);
             }
         }
 
         // 2. Image
         if out.is_none() {
             if let Ok(handle) = GetClipboardData(CF_DIB) {
-                let hglobal = windows::Win32::Foundation::HGLOBAL(handle.0);
-                let ptr = GlobalLock(hglobal);
-                if !ptr.is_null() {
-                    let size = GlobalSize(hglobal);
-                    let bytes = std::slice::from_raw_parts(ptr as *const u8, size);
-                    if let Some(png) = dib_to_png(bytes) {
+                if let Some(bytes) = hglobal_bytes(handle) {
+                    if let Some(png) = dib_to_png(&bytes) {
                         out = Some(ClipContent::Image { png });
                     }
-                    GlobalUnlock(hglobal);
                 }
             }
         }
 
-        // 3. Text (possibly with HTML flavor)
+        // 3. Text (possibly with HTML flavor). The HTML flavor is read under
+        //    the SAME open — a nested OpenClipboard is not guaranteed to
+        //    succeed on Windows.
         if out.is_none() {
-            let text: Option<String> = GetClipboardData(CF_UNICODETEXT).ok().and_then(|h| {
-                let hglobal = windows::Win32::Foundation::HGLOBAL(h.0);
-                let ptr = GlobalLock(hglobal);
-                if ptr.is_null() {
-                    return None;
-                }
-                let size = GlobalSize(hglobal);
-                let bytes = std::slice::from_raw_parts(ptr as *const u8, size);
-                // UTF-16, null-terminated
-                let u16s: Vec<u16> = bytes
-                    .chunks_exact(2)
-                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                    .take_while(|&u| u != 0)
-                    .collect();
-                GlobalUnlock(hglobal);
-                Some(String::from_utf16_lossy(&u16s))
-            });
-
+            let text = GetClipboardData(CF_UNICODETEXT)
+                .ok()
+                .and_then(|h| hglobal_bytes(h))
+                .map(utf16_to_string);
             if let Some(text) = text {
                 let trimmed = text.trim();
                 if !trimmed.is_empty() {
-                    let html = read_html_format().map(|h| sanitize_html(&h));
+                    // Parse the CF_HTML header, keep only the fragment.
+                    let html = read_html_locked()
+                        .and_then(|raw| extract_cf_html_fragment(&raw))
+                        .map(|h| sanitize_html(&h));
                     out = Some(classify_text(trimmed.to_string(), html));
                 }
             }
@@ -100,7 +106,35 @@ pub fn read_clipboard() -> Option<ClipContent> {
     result
 }
 
-#[cfg(not(windows))]
+/// macOS (Apple Silicon): read via NSPasteboard, same priority order —
+/// files > image > text. NSPasteboard is documented thread-safe.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard() -> Option<ClipContent> {
+    use crate::macos;
+
+    // 1. Files (highest priority — Finder copies carry text too)
+    if let Some(paths) = macos::read_file_paths() {
+        if !paths.is_empty() {
+            return Some(ClipContent::Files { paths });
+        }
+    }
+
+    // 2. Image (public.png, or TIFF converted via NSBitmapImageRep)
+    if let Some(png) = macos::read_image_png() {
+        return Some(ClipContent::Image { png });
+    }
+
+    // 3. Text (possibly with HTML flavor)
+    let text = macos::read_text()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let html = macos::read_html().map(|h| sanitize_html(&h));
+    Some(classify_text(trimmed.to_string(), html))
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn read_clipboard() -> Option<ClipContent> {
     None
 }
@@ -155,56 +189,27 @@ pub fn parse_color(s: &str) -> Option<(u8, u8, u8)> {
     }
 }
 
-/// Extract the HTML fragment from the "HTML Format" clipboard flavor and
-/// strip scripts/styles/event handlers. Returns sanitized HTML or None.
-pub fn read_html_format() -> Option<String> {
-    read_raw_html_format().map(|raw| {
-        let fragment = extract_cf_html_fragment(&raw).unwrap_or(raw);
-        sanitize_html(&fragment)
-    })
-}
-
+/// Read the raw "HTML Format" payload. The caller must hold the clipboard
+/// open (a nested OpenClipboard call is not guaranteed to succeed).
 #[cfg(windows)]
-fn read_raw_html_format() -> Option<String> {
-    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW};
-    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+unsafe fn read_html_locked() -> Option<String> {
     use windows::core::PCWSTR;
+    use windows::Win32::System::DataExchange::{GetClipboardData, RegisterClipboardFormatW};
 
     let fmt_name: Vec<u16> = "HTML Format\0".encode_utf16().collect();
-    let fmt = unsafe { RegisterClipboardFormatW(PCWSTR(fmt_name.as_ptr())) };
+    let fmt = RegisterClipboardFormatW(PCWSTR(fmt_name.as_ptr()));
     if fmt == 0 {
         return None;
     }
-    unsafe {
-        if OpenClipboard(None).is_err() {
-            return None;
-        }
-        let out = (|| {
-            let handle = GetClipboardData(fmt).ok()?;
-            let hglobal = windows::Win32::Foundation::HGLOBAL(handle.0);
-            let ptr = GlobalLock(hglobal);
-            if ptr.is_null() {
-                return None;
-            }
-            let size = GlobalSize(hglobal);
-            let bytes = std::slice::from_raw_parts(ptr as *const u8, size);
-            GlobalUnlock(hglobal);
-            Some(String::from_utf8_lossy(bytes).into_owned())
-        })();
-        let _ = CloseClipboard();
-        out
-    }
-}
-
-#[cfg(not(windows))]
-fn read_raw_html_format() -> Option<String> {
-    None
+    GetClipboardData(fmt)
+        .ok()
+        .and_then(|h| hglobal_bytes(h))
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Parse the CF_HTML header and return the fragment between
 /// <!--StartFragment--> and <!--EndFragment--> using byte offsets.
-fn extract_cf_html_fragment(raw: &str) -> Option<String> {
-    let bytes = raw.as_bytes();
+pub(crate) fn extract_cf_html_fragment(raw: &str) -> Option<String> {
     let header = |name: &str| -> Option<usize> {
         let idx = raw.find(name)?;
         let rest = &raw[idx + name.len()..];
@@ -216,10 +221,12 @@ fn extract_cf_html_fragment(raw: &str) -> Option<String> {
     };
     let start = header("StartFragment:")?;
     let end = header("EndFragment:")?;
-    if start >= end || end > bytes.len() {
+    if start >= end {
         return None;
     }
-    let slice = &raw[start..end];
+    // `get` returns None on out-of-bounds OR non-char-boundary offsets —
+    // lossy-decoded payloads can shift byte offsets, and slicing would panic.
+    let slice = raw.get(start..end)?;
     // Strip the markers themselves if present inside the slice.
     Some(slice
         .replace("<!--StartFragment-->", "")
@@ -404,4 +411,89 @@ pub fn hash_bytes(b: &[u8]) -> String {
     let mut h = Sha256::new();
     h.update(b);
     hex::encode(&h.finalize()[..16])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn classify_text_kinds() {
+        assert!(matches!(
+            classify_text("https://example.com/x".into(), None),
+            ClipContent::Link { .. }
+        ));
+        assert!(matches!(
+            classify_text("www.example.com".into(), None),
+            ClipContent::Link { .. }
+        ));
+        assert!(matches!(
+            classify_text("#ff00aa".into(), None),
+            ClipContent::Color { .. }
+        ));
+        assert!(matches!(
+            classify_text("just some text".into(), None),
+            ClipContent::Text { .. }
+        ));
+    }
+
+    #[test]
+    fn is_url_boundaries() {
+        assert!(is_url("http://a.co"));
+        assert!(is_url("https://example.com/path?q=1"));
+        assert!(!is_url("has space.com"));
+        assert!(!is_url("ab"));
+        assert!(!is_url("two\nlines"));
+        assert!(!is_url("plain.example.com"));
+    }
+
+    #[test]
+    fn parse_color_formats() {
+        assert_eq!(parse_color("#fff"), Some((255, 255, 255)));
+        assert_eq!(parse_color("#aabbcc"), Some((0xaa, 0xbb, 0xcc)));
+        assert_eq!(parse_color("0xaabbcc"), Some((0xaa, 0xbb, 0xcc)));
+        assert_eq!(parse_color("0XAABBCC"), Some((0xaa, 0xbb, 0xcc)));
+        assert_eq!(parse_color("#aabbccdd"), Some((0xaa, 0xbb, 0xcc)));
+        assert_eq!(parse_color("#abcd"), None);
+        assert_eq!(parse_color("nope"), None);
+    }
+
+    #[test]
+    fn sanitize_html_strips_scripts_keeps_style() {
+        let out = sanitize_html("<script>alert(1)</script><p style=\"color:red\">ok</p>");
+        assert!(!out.contains("script"), "script tag must be dropped: {out}");
+        assert!(!out.contains("alert"));
+        assert!(out.contains("color:red"));
+    }
+
+    /// build_cf_html (paste-back) and extract_cf_html_fragment (capture)
+    /// must round-trip, including multi-byte UTF-8 content.
+    #[test]
+    fn cf_html_roundtrip() {
+        let fragment = "<b>hello</b> wörld";
+        let payload = crate::clipboard::set::build_cf_html(fragment);
+        let raw = String::from_utf8(payload).expect("payload must be utf-8");
+        let extracted = extract_cf_html_fragment(&raw).expect("fragment must parse");
+        assert_eq!(extracted, fragment);
+    }
+
+    #[test]
+    fn png_dib_roundtrip() {
+        let img = image::RgbaImage::from_pixel(4, 3, image::Rgba([255, 0, 0, 255]));
+        let mut buf = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut buf, image::ImageFormat::Png)
+            .unwrap();
+        let png = buf.into_inner();
+
+        let dib = png_to_dib(&png).expect("png -> dib");
+        let png2 = dib_to_png(&dib).expect("dib -> png");
+
+        let a = image::load_from_memory(&png).unwrap().to_rgba8();
+        let b = image::load_from_memory(&png2).unwrap().to_rgba8();
+        assert_eq!(a.dimensions(), b.dimensions());
+        assert_eq!(a.get_pixel(0, 0), b.get_pixel(0, 0));
+        assert_eq!(a.get_pixel(3, 2), b.get_pixel(3, 2));
+    }
 }

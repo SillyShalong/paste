@@ -1,29 +1,29 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useStore } from "./store/useStore";
 import { api, events } from "./lib/api";
 import ClipboardPanel from "./components/ClipboardPanel";
 
 export default function App() {
   const init = useStore((s) => s.init);
-  const addClip = useStore((s) => s.addClip);
   const store = useStore;
-  const started = useRef(false);
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
     init();
-    events.onNewClip((clip) => store.getState().addClip(clip));
-    events.onPanelOpened(() => {
-      const s = store.getState();
-      if (s.query) s.setQuery("");
-      s.setSel(0);
-      requestAnimationFrame(() => {
-        document.querySelector<HTMLInputElement>(".search-input")?.focus();
-      });
-    });
-    events.onPauseChanged((paused) => useStore.setState({ paused }));
-    events.onSettingsChanged((settings) => useStore.setState({ settings }));
+    const unlisteners = [
+      events.onNewClip((clip) => store.getState().addClip(clip)),
+      events.onPanelOpened(() => {
+        const s = store.getState();
+        if (s.query) s.setQuery("");
+        s.setSel(0);
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLInputElement>(".search-input")?.focus();
+        });
+      }),
+      events.onPauseChanged((paused) => useStore.setState({ paused })),
+      events.onSettingsChanged((settings) => useStore.setState({ settings })),
+    ];
+    return () => unlisteners.forEach((p) => p.then((off) => off()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Global keyboard handling for the panel window.
@@ -41,7 +41,9 @@ export default function App() {
         api.hidePanel();
         return;
       }
-      if (e.ctrlKey && (e.key === "b" || e.key === "B")) {
+      // Primary modifier: Ctrl on Windows/Linux, Cmd on macOS.
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === "b" || e.key === "B")) {
         e.preventDefault();
         s.toggleSidebar();
         return;
@@ -62,15 +64,15 @@ export default function App() {
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        s.paste(e.ctrlKey);
+        s.paste(mod);
         return;
       }
-      if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
+      if (mod && (e.key === "p" || e.key === "P")) {
         e.preventDefault();
         s.pinSelected();
         return;
       }
-      if (e.key === "Delete" || (e.ctrlKey && (e.key === "d" || e.key === "D"))) {
+      if (e.key === "Delete" || (mod && (e.key === "d" || e.key === "D"))) {
         e.preventDefault();
         s.deleteClip();
         return;
@@ -83,7 +85,7 @@ export default function App() {
         s.setKindFilter(next);
         return;
       }
-      if (!inSearch && e.key.length === 1 && !e.ctrlKey && !e.altKey) {
+      if (!inSearch && e.key.length === 1 && !mod && !e.altKey) {
         // start typing anywhere → jump into the search box
         document.querySelector<HTMLInputElement>(".search-input")?.focus();
       }

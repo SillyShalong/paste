@@ -33,16 +33,26 @@ export default function ConfirmPopover({
         onConfirm();
       }
     };
-    window.addEventListener("mousedown", onDown);
+    // Listen on "click" (not "mousedown"): the dismissing listener is
+    // registered after React's onClick handlers run, so clicking the toggle
+    // button that owns this popover closes it cleanly instead of dismissing
+    // on mousedown and immediately re-opening on click.
+    window.addEventListener("click", onDown);
     window.addEventListener("keydown", onKey, true);
     return () => {
-      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("click", onDown);
       window.removeEventListener("keydown", onKey, true);
     };
   }, [onConfirm, onDismiss]);
 
   return (
-    <div className="confirm-pop" ref={ref} onMouseDown={(e) => e.stopPropagation()}>
+    <div
+      className="confirm-pop"
+      ref={ref}
+      onMouseDown={(e) => e.stopPropagation()}
+      // keep menu-internal clicks from reaching the window-level dismissal
+      onClick={(e) => e.stopPropagation()}
+    >
       <span className="confirm-msg">{message}</span>
       <button
         className="confirm-yes"

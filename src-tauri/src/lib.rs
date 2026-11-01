@@ -1,6 +1,8 @@
 pub mod appinfo;
 pub mod clipboard;
 pub mod commands;
+#[cfg(target_os = "macos")]
+pub mod macos;
 pub mod paste;
 pub mod settings;
 pub mod state;
@@ -23,8 +25,35 @@ use state::AppState;
 /// Logical height of the panel strip (CSS px at 100% scale).
 const PANEL_HEIGHT: f64 = 440.0;
 
+/// Try to become the single app instance. The unnamed-ownership mutex is
+/// intentionally leaked: the OS releases it when the process exits.
+#[cfg(windows)]
+fn acquire_single_instance_lock() -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::System::Threading::CreateMutexW;
+
+    let name: Vec<u16> = "com.pasteclone.app.single-instance\0"
+        .encode_utf16()
+        .collect();
+    unsafe {
+        let _ = CreateMutexW(None, false, PCWSTR(name.as_ptr()));
+        GetLastError() != ERROR_ALREADY_EXISTS
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Single instance: a second concurrent launch would fight over the
+    // WebView2 user-data folder and abort with 0x800700AA ("resource in
+    // use") at startup — and each crash leaves zombie browser processes
+    // that keep the folder locked for every later launch.
+    #[cfg(windows)]
+    if !acquire_single_instance_lock() {
+        eprintln!("[paste] another instance is already running; exiting");
+        return;
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -43,6 +72,9 @@ pub fn run() {
         .setup(|app| {
             let state = AppState::new(app.handle())?;
             app.manage(state);
+            // Needed before the clipboard listener starts (macOS main-thread
+            // dispatch for AppKit work).
+            let _ = state::APP_HANDLE.set(app.handle().clone());
 
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
@@ -79,6 +111,7 @@ pub fn run() {
             commands::toggle_pause,
             commands::hide_panel,
             commands::open_settings,
+            commands::paste_permission_granted,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Paste");
@@ -119,7 +152,12 @@ fn digit_shortcut(i: u8) -> Shortcut {
         8 => Code::Digit8,
         _ => Code::Digit9,
     };
-    Shortcut::new(Some(Modifiers::CONTROL), code)
+    // Quick paste with Cmd on macOS, Ctrl elsewhere.
+    #[cfg(target_os = "macos")]
+    let modifier = Modifiers::SUPER;
+    #[cfg(not(target_os = "macos"))]
+    let modifier = Modifiers::CONTROL;
+    Shortcut::new(Some(modifier), code)
 }
 
 /// (Re)register all global shortcuts according to current settings.

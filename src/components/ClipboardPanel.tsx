@@ -1,4 +1,5 @@
 import { useStore } from "../store/useStore";
+import { modLabel } from "../lib/platform";
 import SearchBar from "./SearchBar";
 import Sidebar from "./Sidebar";
 import CardStrip from "./CardStrip";
@@ -24,8 +25,8 @@ export default function ClipboardPanel() {
           <footer className="panel-footer">
             <span className="hint"><kbd>←</kbd><kbd>→</kbd> Navigate</span>
             <span className="hint"><kbd>Enter</kbd> Paste</span>
-            <span className="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Paste as Plain Text</span>
-            <span className="hint"><kbd>Ctrl</kbd>+<kbd>P</kbd> Pin</span>
+            <span className="hint"><kbd>{modLabel}</kbd>+<kbd>Enter</kbd> Paste as Plain Text</span>
+            <span className="hint"><kbd>{modLabel}</kbd>+<kbd>P</kbd> Pin</span>
             <span className="hint"><kbd>Del</kbd> Delete</span>
             <span className="hint"><kbd>Tab</kbd> Filter</span>
             <span className="hint"><kbd>Esc</kbd> Close</span>

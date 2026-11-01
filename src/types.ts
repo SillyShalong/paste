@@ -33,6 +33,7 @@ export interface Settings {
   autostart: boolean;
   theme: string;
   panelPosition: string;
+  wheelDirection: string;
 }
 
 export interface SourceInfo {

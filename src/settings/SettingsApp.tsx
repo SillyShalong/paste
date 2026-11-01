@@ -78,6 +78,18 @@ export default function SettingsApp() {
             <option value="bottom">Bottom of screen</option>
           </select>
         </Row>
+        <Row
+          label="Wheel direction"
+          desc="Mouse wheel over the history cards"
+        >
+          <select
+            value={settings.wheelDirection || "default"}
+            onChange={(e) => update({ wheelDirection: e.target.value })}
+          >
+            <option value="default">Down = browse older (scroll right)</option>
+            <option value="natural">Down = browse newer (scroll left)</option>
+          </select>
+        </Row>
       </section>
 
       <section className="settings-section">

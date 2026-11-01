@@ -26,6 +26,10 @@ pub struct AppSettings {
     /// Vertical placement of the panel on its screen: "center" | "top" | "bottom".
     #[serde(default)]
     pub panel_position: String,
+    /// Mouse-wheel direction over the card strip: "default" (down = older,
+    /// scroll right) or "natural" (down = newer, scroll left).
+    #[serde(default)]
+    pub wheel_direction: String,
 }
 
 impl Default for AppSettings {
@@ -39,6 +43,7 @@ impl Default for AppSettings {
             paused: false,
             autostart: false,
             panel_position: "center".into(),
+            wheel_direction: "default".into(),
         }
     }
 }

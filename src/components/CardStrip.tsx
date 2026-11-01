@@ -5,6 +5,7 @@ export default function CardStrip() {
   const clips = useStore((s) => s.clips);
   const sel = useStore((s) => s.sel);
   const query = useStore((s) => s.query);
+  const wheelDirection = useStore((s) => s.settings?.wheelDirection ?? "default");
 
   if (clips.length === 0) {
     return (
@@ -24,7 +25,8 @@ export default function CardStrip() {
           const el = e.currentTarget;
           const dy =
             e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * el.clientWidth : e.deltaY;
-          el.scrollLeft += dy + e.deltaX;
+          const dir = wheelDirection === "natural" ? -1 : 1;
+          el.scrollLeft += (dy + e.deltaX) * dir;
         }}
       >
         {clips.map((clip, i) => (

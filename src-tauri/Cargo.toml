@@ -1,6 +1,6 @@
 [package]
 name = "paste"
-version = "0.1.0"
+version = "0.2.0"
 description = "Paste — a clipboard history app (clone of Paste for Mac) for Windows"
 authors = ["paste-clone"]
 edition = "2021"

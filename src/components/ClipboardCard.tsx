@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useT } from "../i18n";
 import { useStore } from "../store/useStore";
 import type { Clip } from "../types";
 import { api, convertFileSrc } from "../lib/api";
@@ -17,6 +19,7 @@ export default function ClipboardCard({
   index: number;
   selected: boolean;
 }) {
+  const t = useT();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const pinboards = useStore((s) => s.pinboards);
 
@@ -30,6 +33,10 @@ export default function ClipboardCard({
       style={{ ["--source-color" as string]: color }}
       onMouseEnter={(e) => useStore.getState().setSel(index)}
       onClick={() => useStore.getState().paste()}
+      onDoubleClick={() => {
+        useStore.getState().setSel(index);
+        useStore.getState().openDetail();
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         useStore.getState().setSel(index);
@@ -39,8 +46,8 @@ export default function ClipboardCard({
       <div className="card-topbar" />
       <div className="card-head">
         {icon && <img className="app-icon" src={icon} alt="" draggable={false} />}
-        <span className="app-name" title={clip.sourceName || "Unknown"}>
-          {clip.sourceName || "Unknown"}
+        <span className="app-name" title={clip.sourceName || t("Unknown")}>
+          {clip.sourceName || t("Unknown")}
         </span>
         {clip.pinboardId != null && <PinBadge />}
       </div>
@@ -49,14 +56,14 @@ export default function ClipboardCard({
       </div>
       {selected && (
         <div className="card-actions">
-          <button title="Paste (Enter)" onClick={(e) => { e.stopPropagation(); useStore.getState().paste(); }}>
-            Paste
+          <button title={t("Paste (Enter)")} onClick={(e) => { e.stopPropagation(); useStore.getState().paste(); }}>
+            {t("Paste")}
           </button>
-          <button title="Paste as plain text (Ctrl+Enter)" onClick={(e) => { e.stopPropagation(); useStore.getState().paste(true); }}>
-            Plain
+          <button title={t("Paste as plain text (Ctrl+Enter)")} onClick={(e) => { e.stopPropagation(); useStore.getState().paste(true); }}>
+            {t("Plain")}
           </button>
-          <button title="Delete (Del)" className="danger" onClick={(e) => { e.stopPropagation(); useStore.getState().deleteClip(); }}>
-            Delete
+          <button title={t("Delete (Del)")} className="danger" onClick={(e) => { e.stopPropagation(); useStore.getState().deleteClip(); }}>
+            {t("Delete")}
           </button>
         </div>
       )}
@@ -89,8 +96,9 @@ function Preview({ clip }: { clip: Clip }) {
 }
 
 function PinBadge() {
+  const t = useT();
   return (
-    <span className="pin-badge" title="Pinned">
+    <span className="pin-badge" title={t("Pinned")}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
         <path d="M16 3l5 5-5.5 2.5L13 15l-2-4-6 6 6-6-4-2 4.5-2.5z" transform="rotate(45 12 12)" />
       </svg>
@@ -111,20 +119,24 @@ function ContextMenu({
   pinboards: { id: number; name: string }[];
   onClose: () => void;
 }) {
+  const t = useT();
   useOutsideClose(onClose);
-  return (
+  // Render into body: the card has transform + overflow:hidden, which would
+  // clip a fixed-position menu rendered inside it.
+  return createPortal(
     <div
       className="context-menu"
       style={{ left: x, top: y }}
       // keep the window-level mousedown closer from firing for menu clicks
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-    >      <MenuItem label="Paste" onClick={() => { useStore.getState().paste(); onClose(); }} />
-      <MenuItem label="Paste as Plain Text" onClick={() => { useStore.getState().paste(true); onClose(); }} />
+    >
+      <MenuItem label={t("Paste")} onClick={() => { useStore.getState().paste(); onClose(); }} />
+      <MenuItem label={t("Paste as Plain Text")} onClick={() => { useStore.getState().paste(true); onClose(); }} />
       <div className="menu-sep" />
       {pinboards.length > 0 ? (
         <>
-          <div className="menu-label">Pin to</div>
+          <div className="menu-label">{t("Pin to")}</div>
           {pinboards.map((p) => (
             <MenuItem
               key={p.id}
@@ -139,25 +151,26 @@ function ContextMenu({
           ))}
         </>
       ) : (
-        <MenuItem label="Create a Pinboard first…" onClick={() => { api.openSettings(); onClose(); }} />
+        <MenuItem label={t("Create a Pinboard first…")} onClick={() => { api.openSettings(); onClose(); }} />
       )}
       <div className="menu-sep" />
       <MenuItem
-        label="Copy Again"
+        label={t("Copy Again")}
         onClick={() => {
           useStore.getState().paste();
           onClose();
         }}
       />
       <MenuItem
-        label="Delete"
+        label={t("Delete")}
         danger
         onClick={() => {
           useStore.getState().deleteClip(clip.id);
           onClose();
         }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 

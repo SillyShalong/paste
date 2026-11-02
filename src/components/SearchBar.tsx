@@ -3,6 +3,7 @@ import { useStore } from "../store/useStore";
 import type { ClipKind } from "../types";
 import { api } from "../lib/api";
 import { modLabel } from "../lib/platform";
+import { useT } from "../i18n";
 import ConfirmPopover from "./ConfirmPopover";
 
 const FILTERS: { key: ClipKind | "all"; label: string }[] = [
@@ -15,6 +16,7 @@ const FILTERS: { key: ClipKind | "all"; label: string }[] = [
 ];
 
 export default function SearchBar() {
+  const t = useT();
   const query = useStore((s) => s.query);
   const setQuery = useStore((s) => s.setQuery);
   const kindFilter = useStore((s) => s.kindFilter);
@@ -29,22 +31,21 @@ export default function SearchBar() {
   return (
     <div className="search-area">
       <div className="search-row">
-        <button className="icon-btn" title="Toggle sidebar (Ctrl+B)" onClick={() => useStore.getState().toggleSidebar()}>
+        <button className="icon-btn" title={t("Toggle sidebar (Ctrl+B)")} onClick={() => useStore.getState().toggleSidebar()}>
           <SidebarIcon />
         </button>
         <input
           className="search-input"
           type="text"
-          placeholder="Search clipboard history…"
+          placeholder={t("Search clipboard history…")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          autoFocus
           spellCheck={false}
         />
-        <button className="icon-btn" title={paused ? "Resume history" : "Pause history"} onClick={() => api.togglePause()}>
+        <button className="icon-btn" title={paused ? t("Resume history") : t("Pause history")} onClick={() => api.togglePause()}>
           {paused ? <PlayIcon /> : <PauseIcon />}
         </button>
-        <button className="icon-btn" title="Settings" onClick={() => api.openSettings()}>
+        <button className="icon-btn" title={t("Settings")} onClick={() => api.openSettings()}>
           <GearIcon />
         </button>
       </div>
@@ -56,7 +57,7 @@ export default function SearchBar() {
             className={`chip ${kindFilter === f.key ? "active" : ""}`}
             onClick={() => setKindFilter(f.key)}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
         <div className="spacer" />
@@ -71,20 +72,21 @@ export default function SearchBar() {
 /// (A native confirm() dialog would steal focus from the panel and trigger
 /// the auto-hide-on-blur behavior, closing the panel — so we never use one.)
 function ClearHistoryChip() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="clear-wrap">
       <button
         className={`chip danger ${open ? "active" : ""}`}
-        title="Clear all unpinned history"
+        title={t("Clear History")}
         onClick={() => setOpen((v) => !v)}
       >
-        Clear History
+        {t("Clear History")}
       </button>
       {open && (
         <ConfirmPopover
-          message="Clear all clipboard history? Pinned items are kept."
-          confirmLabel="Clear"
+          message={t("Clear all clipboard history? Pinned items are kept.")}
+          confirmLabel={t("Clear")}
           onConfirm={() => {
             useStore.getState().clearHistory();
             setOpen(false);

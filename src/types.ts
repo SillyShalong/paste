@@ -32,6 +32,10 @@ export interface Settings {
   paused: boolean;
   autostart: boolean;
   theme: string;
+  panelPosition: string;
+  wheelDirection: string;
+  trayIcon: string;
+  language: string;
 }
 
 export interface SourceInfo {

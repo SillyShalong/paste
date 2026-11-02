@@ -34,6 +34,19 @@ pub struct AppSettings {
     /// Panel theme: "system" | "dark" | "light".
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Vertical placement of the panel on its screen: "center" | "top" | "bottom".
+    #[serde(default)]
+    pub panel_position: String,
+    /// Mouse-wheel direction over the card strip: "default" (down = older,
+    /// scroll right) or "natural" (down = newer, scroll left).
+    #[serde(default)]
+    pub wheel_direction: String,
+    /// Tray icon variant id: classic | emerald | sunset | ocean | mono | pearl.
+    #[serde(default)]
+    pub tray_icon: String,
+    /// UI language: "system" (follow OS) | "en" | "zh".
+    #[serde(default)]
+    pub language: String,
 }
 
 fn default_hotkey() -> String {
@@ -59,6 +72,10 @@ impl Default for AppSettings {
             paused: false,
             autostart: false,
             theme: default_theme(),
+            panel_position: "bottom".into(),
+            wheel_direction: "default".into(),
+            tray_icon: "classic".into(),
+            language: "system".into(),
         }
     }
 }

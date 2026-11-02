@@ -48,6 +48,8 @@ export const api = {
     invoke<boolean>("rename_pinboard", { id, name }),
   deletePinboard: (id: number) => invoke<boolean>("delete_pinboard", { id }),
 
+  listTrayIcons: () => invoke<{ id: string; pngBase64: string }[]>("list_tray_icons"),
+
   togglePause: () => invoke<boolean>("toggle_pause"),
   hidePanel: () => invoke<void>("hide_panel"),
   openSettings: () => invoke<void>("open_settings"),

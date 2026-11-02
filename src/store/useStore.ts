@@ -14,6 +14,7 @@ interface StoreState {
   sel: number;
   sidebarOpen: boolean;
   toast: string | null;
+  detailClipId: number | null;
 
   init: () => Promise<void>;
   refetch: () => Promise<void>;
@@ -24,6 +25,8 @@ interface StoreState {
   setSel: (i: number) => void;
   moveSel: (delta: number) => number;
   toggleSidebar: () => void;
+  openDetail: () => void;
+  closeDetail: () => void;
   paste: (plain?: boolean) => Promise<void>;
   deleteClip: (id?: number) => Promise<void>;
   pinSelected: () => Promise<void>;
@@ -50,6 +53,7 @@ export const useStore = create<StoreState>((set, get) => ({
   sel: 0,
   sidebarOpen: true,
   toast: null,
+  detailClipId: null,
 
   init: async () => {
     const data = await api.getInitial();
@@ -111,6 +115,13 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
+
+  openDetail: () => {
+    const clip = get().clips[get().sel];
+    if (clip) set({ detailClipId: clip.id });
+  },
+
+  closeDetail: () => set({ detailClipId: null }),
 
   paste: async (plain = false) => {
     const { clips, sel } = get();

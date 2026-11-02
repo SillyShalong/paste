@@ -28,6 +28,26 @@ pub struct SourceInfo {
     pub color: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayIconOption {
+    pub id: String,
+    pub png_base64: String,
+}
+
+/// Preview images for the tray icon picker in the settings window.
+#[tauri::command]
+pub fn list_tray_icons() -> Vec<TrayIconOption> {
+    use base64::Engine as _;
+    crate::TRAY_ICON_SETS
+        .iter()
+        .map(|(id, png)| TrayIconOption {
+            id: id.to_string(),
+            png_base64: base64::engine::general_purpose::STANDARD.encode(png),
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn get_initial(app: AppHandle) -> InitialData {
     let state = app.state::<AppState>();
@@ -151,6 +171,8 @@ pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), Str
     }
 
     settings::save(&state.db.lock().unwrap(), &new_settings);
+    crate::apply_tray_icon(&app, &new_settings.tray_icon);
+    crate::refresh_tray(&app); // tray icon + menu labels follow the settings
     // Keep autostart in sync with the toggle.
     use tauri_plugin_autostart::ManagerExt;
     let launcher = app.autolaunch();
@@ -237,6 +259,11 @@ pub fn hide_panel(app: AppHandle) {
 /// loop (window appears but the whole app freezes and can't be closed).
 #[tauri::command]
 pub async fn open_settings(app: AppHandle) {
+    // The panel is always-on-top; hide it first so the settings window
+    // doesn't end up buried behind it.
+    if let Some(panel) = app.get_webview_window("panel") {
+        let _ = panel.hide();
+    }
     let _ = crate::open_settings_window(&app);
 }
 

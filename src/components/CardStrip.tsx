@@ -1,10 +1,12 @@
 import { useStore } from "../store/useStore";
 import ClipboardCard from "./ClipboardCard";
+import { useT } from "../i18n";
 
 export default function CardStrip() {
   const clips = useStore((s) => s.clips);
   const sel = useStore((s) => s.sel);
   const query = useStore((s) => s.query);
+  const wheelDirection = useStore((s) => s.settings?.wheelDirection ?? "default");
 
   if (clips.length === 0) {
     return (
@@ -16,7 +18,18 @@ export default function CardStrip() {
 
   return (
     <div className="card-strip">
-      <div className="cards-row">
+      <div
+        className="cards-row"
+        onWheel={(e) => {
+          // vertical wheel scrolls the horizontal history strip; trackpad
+          // horizontal swipes (deltaX) pass through natively
+          const el = e.currentTarget;
+          const dy =
+            e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * el.clientWidth : e.deltaY;
+          const dir = wheelDirection === "natural" ? -1 : 1;
+          el.scrollLeft += (dy + e.deltaX) * dir;
+        }}
+      >
         {clips.map((clip, i) => (
           <ClipboardCard key={clip.id} clip={clip} index={i} selected={i === sel} />
         ))}
@@ -26,14 +39,15 @@ export default function CardStrip() {
 }
 
 function EmptyState({ query }: { query: string }) {
+  const t = useT();
   return (
     <div className="empty-state">
       <ClipboardGlyph />
-      <h2>{query ? "No matches found" : "Your clipboard history is empty"}</h2>
+      <h2>{query ? t("No matches found") : t("Your clipboard history is empty")}</h2>
       <p>
         {query
-          ? `Nothing in your history matches “${query}”.`
-          : "Copy something anywhere in Windows and it will show up here instantly."}
+          ? t("No matches found")
+          : t("Copy something anywhere in Windows and it will show up here instantly.")}
       </p>
     </div>
   );

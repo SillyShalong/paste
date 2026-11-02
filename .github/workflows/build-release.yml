@@ -1,5 +1,8 @@
 name: Build Windows Release
 
+# Development happens on dev; merging dev into main and pushing is the
+# "ship it" signal — every main push builds the app. Version tags
+# additionally publish a formal Release. dev pushes do not build.
 on:
   push:
     branches: [main]

@@ -42,6 +42,72 @@ fn acquire_single_instance_lock() -> bool {
     }
 }
 
+/// Selectable tray icon variants (embedded at compile time).
+const TRAY_ICON_SETS: &[(&str, &[u8])] = &[
+    ("classic", include_bytes!("../icons/tray/classic.png")),
+    ("emerald", include_bytes!("../icons/tray/emerald.png")),
+    ("sunset", include_bytes!("../icons/tray/sunset.png")),
+    ("ocean", include_bytes!("../icons/tray/ocean.png")),
+    ("mono", include_bytes!("../icons/tray/mono.png")),
+    ("pearl", include_bytes!("../icons/tray/pearl.png")),
+];
+
+/// Resolved UI language for native-side strings (tray menu).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Lang {
+    En,
+    Zh,
+}
+
+fn tray_lang(app: &AppHandle) -> Lang {
+    let pref = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .unwrap()
+        .language
+        .clone();
+    let zh = match pref.as_str() {
+        "zh" => true,
+        "en" => false,
+        _ => sys_locale::get_locale()
+            .map(|l| l.to_lowercase().starts_with("zh"))
+            .unwrap_or(false),
+    };
+    if zh { Lang::Zh } else { Lang::En }
+}
+
+fn labels_open(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "打开 Paste" } else { "Open Paste" }
+}
+fn labels_pause(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "暂停剪贴板历史" } else { "Pause clipboard history" }
+}
+fn labels_settings(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "设置…" } else { "Settings…" }
+}
+fn labels_quit(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "退出 Paste" } else { "Quit Paste" }
+}
+
+fn tray_icon_image(name: &str) -> tauri::image::Image<'static> {
+    let bytes = TRAY_ICON_SETS
+        .iter()
+        .find(|(id, _)| *id == name)
+        .or_else(|| TRAY_ICON_SETS.first())
+        .map(|(_, b)| *b)
+        .expect("tray icon set is not empty");
+    tauri::image::Image::from_bytes(bytes).expect("embedded tray icon must decode")
+}
+
+/// Swap the tray icon at runtime (settings changes).
+pub fn apply_tray_icon(app: &AppHandle, name: &str) {
+    if let Some(tray) = app.tray_by_id("tray") {
+        let _ = tray.set_icon(Some(tray_icon_image(name)));
+
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Single instance: a second concurrent launch would fight over the
@@ -78,24 +144,60 @@ pub fn run() {
 
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
+
             apply_shortcuts(app.handle())?;
 
-            // Panel behavior: auto-hide when it loses focus (clicking elsewhere,
-            // opening another app...), exactly like Paste on macOS.
-            if let Some(panel) = app.get_webview_window("panel") {
-                let handle = app.handle().clone();
-                panel.on_window_event(move |event| {
-                    if let WindowEvent::Focused(false) = event {
-                        if let Some(w) = handle.get_webview_window("panel") {
-                            let _ = w.hide();
+            // Create the panel here (not from config) so a transient WebView2
+            // failure — 0x800700AA right after a runtime update — can be
+            // retried; if the machine stays busy the app keeps running with
+            // tray + history capture and the panel can be created lazily.
+            let panel = {
+                let mut built = None;
+                for attempt in 1..=5 {
+                    match tauri::WebviewWindowBuilder::new(
+                        app,
+                        "panel",
+                        tauri::WebviewUrl::App("index.html".into()),
+                    )
+                    .title("Paste")
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .skip_taskbar(true)
+                    .resizable(false)
+                    .shadow(false)
+                    .build()
+                    {
+                        Ok(w) => {
+                            built = Some(w);
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[paste] panel create attempt {}/5 failed: {}",
+                                attempt, e
+                            );
+                            std::thread::sleep(std::time::Duration::from_secs(4));
                         }
                     }
-                });
-            }
+                }
+                match built {
+                    Some(w) => w,
+                    None => {
+                        eprintln!(
+                            "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry"
+                        );
+                        return Ok(());
+                    }
+                }
+            };
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_initial,
+            commands::list_tray_icons,
             commands::list_clips,
             commands::paste_clip,
             commands::delete_clip,
@@ -116,6 +218,115 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Paste");
 }
+
+/// Focus the panel window reliably. Windows only lets the foreground
+/// process call SetForegroundWindow, and the hotkey usually arrives while
+/// another app owns the foreground — a plain set_focus() is then silently
+/// ignored, the panel never holds focus, and clicking outside it does not
+/// trigger the auto-hide-on-blur behavior. AttachThreadInput unlocks it
+/// (same technique as the paste focus-restore).
+#[cfg(windows)]
+fn force_focus_panel(panel: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        INPUT_KEYBOARD, SetFocus, VK_MENU,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+    let Some(hwnd) = panel.hwnd().ok().map(|h| h.0 as isize) else { return };
+    unsafe {
+        let hwnd = HWND(hwnd as *mut _);
+        let target_thread = GetWindowThreadProcessId(hwnd, None);
+        let current_thread = GetCurrentThreadId();
+        let fg = GetForegroundWindow();
+        let fg_thread = if fg.0.is_null() {
+            0
+        } else {
+            GetWindowThreadProcessId(fg, None)
+        };
+        let attached_fg = if fg_thread != 0 && fg_thread != current_thread {
+            AttachThreadInput(current_thread, fg_thread, true)
+        } else {
+            false.into()
+        };
+        let attached_target = if target_thread != 0 && target_thread != current_thread {
+            AttachThreadInput(current_thread, target_thread, true)
+        } else {
+            false.into()
+        };
+
+        // While the input queues are attached, focus calls are allowed.
+        let _ = panel.set_focus();
+        let _ = SetForegroundWindow(hwnd);
+        let _ = SetFocus(hwnd);
+
+        if attached_target.as_bool() {
+            AttachThreadInput(current_thread, target_thread, false);
+        }
+        if attached_fg.as_bool() {
+            AttachThreadInput(current_thread, fg_thread, false);
+        }
+
+        // Last resort: a stray Alt tap unlocks SetForegroundWindow when the
+        // foreground lock is still refusing the hand-off.
+        if GetForegroundWindow().0 != hwnd.0 {
+            let mk = |flags: KEYBD_EVENT_FLAGS| INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: flags,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            };
+            let _ = SendInput(
+                &[mk(KEYBD_EVENT_FLAGS(0)), mk(KEYEVENTF_KEYUP)],
+                std::mem::size_of::<INPUT>() as i32,
+            );
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+}
+
+/// Watchdog hiding the panel when it stops being the foreground window.
+/// The blur-based auto-hide only fires if the panel actually received
+/// keyboard focus; when a focus hand-off was refused by Windows this poll
+/// keeps the "click outside closes the panel" behavior regardless.
+#[cfg(windows)]
+fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow) {
+    let Ok(panel_hwnd) = panel.hwnd().map(|h| h.0 as isize) else { return };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Grace period while the focus hand-off settles.
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        loop {
+            let Some(panel) = app.get_webview_window("panel") else { return };
+            if !panel.is_visible().unwrap_or(false) {
+                return;
+            }
+            let fg = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize
+            };
+            if fg != panel_hwnd {
+                let _ = panel.hide();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn spawn_panel_foreground_watcher(_app: &AppHandle, _panel: &tauri::WebviewWindow) {}
+
+#[cfg(not(windows))]
+fn force_focus_panel(_panel: &tauri::WebviewWindow) {}
 
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
     let state = app.state::<AppState>();
@@ -178,53 +389,188 @@ pub fn apply_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>
 }
 
 /// Show/hide the main panel window.
-pub fn toggle_panel(app: &AppHandle) {
+/// Register the auto-hide-on-focus-loss behavior for the panel window.
+fn register_panel_autohide(app: &AppHandle) {
+    let handle = app.clone();
     if let Some(panel) = app.get_webview_window("panel") {
-        if panel.is_visible().unwrap_or(false) {
-            let _ = panel.hide();
-        } else {
-            show_panel(app, &panel);
+        panel.on_window_event(move |event| {
+            if let WindowEvent::Focused(false) = event {
+                if let Some(w) = handle.get_webview_window("panel") {
+                    let _ = w.hide();
+                }
+            }
+        });
+    }
+}
+
+/// Create the panel window with retries. Returns Err only after every
+/// attempt failed — the caller decides whether that is fatal (startup)
+/// or recoverable (lazy retry from the tray).
+fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let mut built = None;
+    let mut last_err = None;
+    for attempt in 1..=5 {
+        match tauri::WebviewWindowBuilder::new(
+            app,
+            "panel",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("Paste")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible(false)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .build()
+        {
+            Ok(w) => {
+                built = Some(w);
+                break;
+            }
+            Err(e) => {
+                eprintln!("[paste] panel create attempt {}/5 failed: {}", attempt, e);
+                last_err = Some(e);
+                std::thread::sleep(std::time::Duration::from_secs(4));
+            }
+        }
+    }
+    match built {
+        Some(w) => {
+            register_panel_autohide(app);
+            Ok(w)
+        }
+        None => Err(last_err.expect("at least one attempt")),
+    }
+}
+
+pub fn toggle_panel(app: &AppHandle) {
+    match app.get_webview_window("panel") {
+        Some(panel) => {
+            if panel.is_visible().unwrap_or(false) {
+                let _ = panel.hide();
+            } else {
+                show_panel(app, &panel);
+            }
+        }
+        None => {
+            // No panel yet (startup creation failed on a busy machine):
+            // retry now that the user is explicitly asking for it.
+            match create_panel(app) {
+                Ok(panel) => show_panel(app, &panel),
+                Err(e) => eprintln!("[paste] panel still unavailable: {}", e),
+            }
         }
     }
 }
 
 pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
-    // Span the full width of the primary monitor, vertically centered —
-    // the signature Paste layout.
+    let state = app.state::<AppState>();
+    let pos_pref = state.settings.lock().unwrap().panel_position.clone();
+
+    // Capture the foreground window BEFORE the panel takes focus — its
+    // monitor is where the user is working, so that's where the panel goes.
+    paste::capture_foreground(app);
+    let prev = *state.prev_hwnd.lock().unwrap();
+
+    #[cfg(windows)]
+    if let Some((mx, my, mw, mh)) = monitor_area_for(prev) {
+        // Land on the target monitor first so scale_factor() reflects it,
+        // then size and place the panel precisely.
+        let _ = panel.set_position(tauri::PhysicalPosition::new(mx, my));
+        let scale = panel.scale_factor().unwrap_or(1.0);
+        let target_h = (PANEL_HEIGHT * scale).round() as i32;
+        let margin = (12.0 * scale).round() as i32;
+        let y = match pos_pref.as_str() {
+            "top" => my + margin,
+            "bottom" => my + mh - target_h - margin,
+            _ => my + (mh - target_h) / 2,
+        };
+        let _ = panel.set_size(tauri::PhysicalSize::new(mw as u32, target_h as u32));
+        let _ = panel.set_position(tauri::PhysicalPosition::new(mx, y));
+    }
+    #[cfg(not(windows))]
     if let Ok(Some(monitor)) = panel.primary_monitor() {
         let scale = monitor.scale_factor();
         let size = monitor.size();
         let pos = monitor.position();
-        let phys_w = size.width;
-        let phys_h = size.height;
         let target_h = (PANEL_HEIGHT * scale).round() as i32;
-        let _ = panel.set_size(tauri::PhysicalSize::new(phys_w, target_h as u32));
-        let y = pos.y + (phys_h as i32 - target_h) / 2;
-        let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, y));
+        let _ = panel.set_size(tauri::PhysicalSize::new(size.width, target_h as u32));
+        let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
     }
-    paste::capture_foreground(app);
+
     let _ = panel.show();
-    let _ = panel.set_focus();
+    force_focus_panel(panel);
     let _ = app.emit_to("panel", "panel:opened", ());
+    spawn_panel_foreground_watcher(app, panel);
+}
+
+/// Physical monitor area (x, y, width, height) for the given window; falls
+/// back to the monitor under the cursor when the window is unknown.
+#[cfg(windows)]
+fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::Foundation::{HWND, POINT};
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST,
+    };
+    unsafe {
+        let hmon = match prev_hwnd {
+            Some(v) if v != 0 => MonitorFromWindow(HWND(v as *mut _), MONITOR_DEFAULTTONEAREST),
+            _ => {
+                let mut pt = POINT::default();
+                let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);
+                MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            }
+        };
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+            Some((
+                mi.rcMonitor.left,
+                mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left,
+                mi.rcMonitor.bottom - mi.rcMonitor.top,
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn monitor_area_for(_prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
+    None
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let paused = app.state::<AppState>().paused.load(Ordering::Relaxed);
-    let open = MenuItem::with_id(app, "open", "Open Paste", true, None::<&str>)?;
+    let icon_name = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .unwrap()
+        .tray_icon
+        .clone();
+    let lang = tray_lang(app);
+        let open = MenuItem::with_id(app, "open", labels_open(lang), true, None::<&str>)?;
     let pause = CheckMenuItem::with_id(
         app,
         "pause",
-        "Pause clipboard history",
+        labels_pause(lang),
         true,
         paused,
         None::<&str>,
     )?;
-    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Paste", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", labels_settings(lang), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", labels_quit(lang), true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &pause, &settings_item, &quit])?;
 
     TrayIconBuilder::with_id("tray")
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(tray_icon_image(&icon_name))
         .tooltip("Paste")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -263,19 +609,20 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn refresh_tray(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("tray") {
         let paused = app.state::<AppState>().paused.load(Ordering::Relaxed);
-        let open = MenuItem::with_id(app, "open", "Open Paste", true, None::<&str>).unwrap();
+        let lang = tray_lang(app);
+        let open = MenuItem::with_id(app, "open", labels_open(lang), true, None::<&str>).unwrap();
         let pause = CheckMenuItem::with_id(
             app,
             "pause",
-            "Pause clipboard history",
+            labels_pause(lang),
             true,
             paused,
             None::<&str>,
         )
         .unwrap();
         let settings_item =
-            MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>).unwrap();
-        let quit = MenuItem::with_id(app, "quit", "Quit Paste", true, None::<&str>).unwrap();
+            MenuItem::with_id(app, "settings", labels_settings(lang), true, None::<&str>).unwrap();
+        let quit = MenuItem::with_id(app, "quit", labels_quit(lang), true, None::<&str>).unwrap();
         let menu = Menu::with_items(app, &[&open, &pause, &settings_item, &quit]).unwrap();
         let _ = tray.set_menu(Some(menu));
     }

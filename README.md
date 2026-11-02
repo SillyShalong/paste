@@ -46,9 +46,13 @@ in the order you choose.
 
 ## 📥 Download
 
-Grab the latest installer from
-**[Releases](https://github.com/SillyShalong/paste/releases)** —
-about 2.4 MB, no admin rights required (per-user install).
+Two flavors on the [Releases](https://github.com/SillyShalong/paste/releases) page:
+
+- **Installer** (`Paste_x.y.z_x64-setup.exe`, ~2.5 MB) — per-user install,
+  start-menu shortcut, uninstaller. No admin rights required.
+- **Portable** (`Paste_x.y.z_x64-portable.zip`, ~3 MB) — unzip and run
+  `Paste.exe` directly. Nothing is installed; perfect for USB sticks and
+  machines where you can't run installers.
 
 > **Requirements:** Windows 10 (1809+) or Windows 11. The WebView2 runtime is
 > already part of Windows 11 and auto-installed on Windows 10.

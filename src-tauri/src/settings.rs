@@ -45,7 +45,7 @@ impl Default for AppSettings {
             excluded_apps: default_excluded_apps(),
             paused: false,
             autostart: false,
-            panel_position: "center".into(),
+            panel_position: "bottom".into(),
             wheel_direction: "default".into(),
             tray_icon: "classic".into(),
         }

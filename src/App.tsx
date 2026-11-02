@@ -36,14 +36,21 @@ export default function App() {
       const inSearch =
         document.activeElement instanceof HTMLInputElement &&
         document.activeElement.classList.contains("search-input");
+      // The user is typing inside another input (pinboard naming, etc.) —
+      // that input handles its own keys; don't hijack them for the panel.
+      const onOtherInput =
+        e.target instanceof HTMLInputElement && !inSearch;
 
       if (e.key === "Escape") {
         e.preventDefault();
         if (detailOpen) {
           s.closeDetail();
-        } else {
+        } else if (!onOtherInput) {
           api.hidePanel();
         }
+        return;
+      }
+      if (onOtherInput) {
         return;
       }
       if (e.ctrlKey && (e.key === "b" || e.key === "B")) {
@@ -110,7 +117,7 @@ export default function App() {
         s.setKindFilter(next);
         return;
       }
-      if (!inSearch && e.key.length === 1 && !e.ctrlKey && !e.altKey) {
+      if (!inSearch && !onOtherInput && e.key.length === 1 && !e.ctrlKey && !e.altKey) {
         // start typing anywhere → close the preview and jump into search
         if (detailOpen) s.closeDetail();
         document.querySelector<HTMLInputElement>(".search-input")?.focus();

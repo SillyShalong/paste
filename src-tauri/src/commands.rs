@@ -239,6 +239,11 @@ pub fn hide_panel(app: AppHandle) {
 /// loop (window appears but the whole app freezes and can't be closed).
 #[tauri::command]
 pub async fn open_settings(app: AppHandle) {
+    // The panel is always-on-top; hide it first so the settings window
+    // doesn't end up buried behind it.
+    if let Some(panel) = app.get_webview_window("panel") {
+        let _ = panel.hide();
+    }
     let _ = crate::open_settings_window(&app);
 }
 

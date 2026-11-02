@@ -147,6 +147,54 @@ pub fn run() {
         .expect("error while running Paste");
 }
 
+/// Focus the panel window reliably. Windows only lets the foreground
+/// process call SetForegroundWindow, and the hotkey usually arrives while
+/// another app owns the foreground — a plain set_focus() is then silently
+/// ignored, the panel never holds focus, and clicking outside it does not
+/// trigger the auto-hide-on-blur behavior. AttachThreadInput unlocks it
+/// (same technique as the paste focus-restore).
+#[cfg(windows)]
+fn force_focus_panel(panel: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+    let _ = panel.set_focus();
+    let Some(hwnd) = panel.hwnd().ok().map(|h| h.0 as isize) else { return };
+    unsafe {
+        let hwnd = HWND(hwnd as *mut _);
+        let target_thread = GetWindowThreadProcessId(hwnd, None);
+        let current_thread = GetCurrentThreadId();
+        let fg = GetForegroundWindow();
+        let fg_thread = if fg.0.is_null() {
+            0
+        } else {
+            GetWindowThreadProcessId(fg, None)
+        };
+        let attached_fg = if fg_thread != 0 && fg_thread != current_thread {
+            AttachThreadInput(current_thread, fg_thread, true)
+        } else {
+            false.into()
+        };
+        let attached_target = if target_thread != 0 && target_thread != current_thread {
+            AttachThreadInput(current_thread, target_thread, true)
+        } else {
+            false.into()
+        };
+        let _ = SetForegroundWindow(hwnd);
+        if attached_target.as_bool() {
+            AttachThreadInput(current_thread, target_thread, false);
+        }
+        if attached_fg.as_bool() {
+            AttachThreadInput(current_thread, fg_thread, false);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn force_focus_panel(_panel: &tauri::WebviewWindow) {}
+
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
     let state = app.state::<AppState>();
     let main = parse_shortcut(&state.settings.lock().unwrap().hotkey);
@@ -315,7 +363,7 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
     }
 
     let _ = panel.show();
-    let _ = panel.set_focus();
+    force_focus_panel(panel);
     let _ = app.emit_to("panel", "panel:opened", ());
 }
 

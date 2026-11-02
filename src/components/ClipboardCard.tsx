@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/useStore";
 import type { Clip } from "../types";
 import { api, convertFileSrc } from "../lib/api";
@@ -116,7 +117,9 @@ function ContextMenu({
   onClose: () => void;
 }) {
   useEffectOnce(onClose);
-  return (
+  // Render into body: the card has transform + overflow:hidden, which would
+  // clip a fixed-position menu rendered inside it.
+  return createPortal(
     <div
       className="context-menu"
       style={{ left: x, top: y }}
@@ -162,7 +165,8 @@ function ContextMenu({
           onClose();
         }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 

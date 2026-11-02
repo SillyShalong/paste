@@ -1,8 +1,10 @@
 name: Build Windows Release
 
+# Builds run on version tags (which publish a Release) and on demand from
+# the Actions tab. Day-to-day pushes to main do NOT trigger builds — tag a
+# commit (git tag v0.x.y && git push origin v0.x.y) when you want a build.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 

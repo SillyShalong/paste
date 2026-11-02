@@ -6,7 +6,7 @@ export default function CardStrip() {
   const clips = useStore((s) => s.clips);
   const sel = useStore((s) => s.sel);
   const query = useStore((s) => s.query);
-  const wheelDirection = useStore((s) => s.settings?.wheelDirection ?? "default");
+  const wheelDirection = useStore((s) => s.settings?.wheelDirection || "default");
 
   if (clips.length === 0) {
     return (

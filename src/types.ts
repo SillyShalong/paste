@@ -35,6 +35,7 @@ export interface Settings {
   panelPosition: string;
   wheelDirection: string;
   trayIcon: string;
+  language: string;
 }
 
 export interface SourceInfo {

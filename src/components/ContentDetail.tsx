@@ -2,10 +2,12 @@ import { useEffect, useRef } from "react";
 import type { Clip } from "../types";
 import { useStore } from "../store/useStore";
 import { api, convertFileSrc } from "../lib/api";
+import { useT } from "../i18n";
 
 /// Full-content preview for the selected clip, opened with Space. Scrollable,
 /// selectable, with paste actions — closes with Space or Esc.
 export default function ContentDetail({ clip }: { clip: Clip }) {
+  const t = useT();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Take keyboard focus away from the search input so Space/typing doesn't
@@ -30,13 +32,13 @@ export default function ContentDetail({ clip }: { clip: Clip }) {
       <div className="detail-header">
         {icon && <img className="app-icon" src={icon} alt="" draggable={false} />}
         <span className="detail-app">{clip.sourceName || "Unknown"}</span>
-        <span className="detail-kind">{clip.kind}</span>
+        <span className="detail-kind">{t(clip.kind)}</span>
         <span className="detail-time">{when}</span>
         <div className="spacer" />
-        <button className="btn" onClick={() => paste(false)}>Paste</button>
-        <button className="btn" onClick={() => paste(true)}>Plain</button>
-        <button className="btn danger" onClick={del}>Delete</button>
-        <button className="icon-btn" title="Close (Esc)" onClick={() => useStore.getState().closeDetail()}>
+        <button className="btn" onClick={() => paste(false)}>{t("Paste")}</button>
+        <button className="btn" onClick={() => paste(true)}>{t("Plain")}</button>
+        <button className="btn danger" onClick={del}>{t("Delete")}</button>
+        <button className="icon-btn" title={t("Close (Esc)")} onClick={() => useStore.getState().closeDetail()}>
           ×
         </button>
       </div>
@@ -48,6 +50,7 @@ export default function ContentDetail({ clip }: { clip: Clip }) {
 }
 
 function Body({ clip }: { clip: Clip }) {
+  const t = useT();
   switch (clip.kind) {
     case "text":
       return clip.html && clip.html.trim() ? (
@@ -68,7 +71,7 @@ function Body({ clip }: { clip: Clip }) {
           <img src={convertFileSrc(clip.imagePath)} alt="clipboard image" draggable={false} />
         </div>
       ) : (
-        <div className="detail-text">Image unavailable</div>
+        <div className="detail-text">{t("Image unavailable")}</div>
       );
     case "file": {
       let paths: string[] = [];

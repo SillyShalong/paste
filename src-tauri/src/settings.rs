@@ -33,6 +33,9 @@ pub struct AppSettings {
     /// Tray icon variant id: classic | emerald | sunset | ocean | mono | pearl.
     #[serde(default)]
     pub tray_icon: String,
+    /// UI language: "system" (follow OS) | "en" | "zh".
+    #[serde(default)]
+    pub language: String,
 }
 
 impl Default for AppSettings {
@@ -48,6 +51,7 @@ impl Default for AppSettings {
             panel_position: "bottom".into(),
             wheel_direction: "default".into(),
             tray_icon: "classic".into(),
+            language: "system".into(),
         }
     }
 }

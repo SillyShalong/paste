@@ -3,8 +3,10 @@ import SearchBar from "./SearchBar";
 import Sidebar from "./Sidebar";
 import CardStrip from "./CardStrip";
 import ContentDetail from "./ContentDetail";
+import { useT } from "../i18n";
 
 export default function ClipboardPanel() {
+  const t = useT();
   const paused = useStore((s) => s.paused);
   const toast = useStore((s) => s.toast);
   const settings = useStore((s) => s.settings);
@@ -20,29 +22,29 @@ export default function ClipboardPanel() {
           <SearchBar />
           {paused && (
             <div className="paused-banner">
-              Clipboard history is paused — new copies are not being recorded.
+              {t("Clipboard history is paused — new copies are not being recorded.")}
             </div>
           )}
           <CardStrip />
           <footer className="panel-footer">
             {detailClip ? (
               <>
-                <span className="hint"><kbd>↑</kbd><kbd>↓</kbd> Scroll</span>
-                <span className="hint"><kbd>←</kbd><kbd>→</kbd> Browse</span>
-                <span className="hint"><kbd>Space</kbd>/<kbd>Esc</kbd> Close</span>
-                <span className="hint"><kbd>Enter</kbd> Paste</span>
-                <span className="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Plain</span>
+                <span className="hint"><kbd>↑</kbd><kbd>↓</kbd> {t("Scroll")}</span>
+                <span className="hint"><kbd>←</kbd><kbd>→</kbd> {t("Browse")}</span>
+                <span className="hint"><kbd>Space</kbd>/<kbd>Esc</kbd> {t("Close")}</span>
+                <span className="hint"><kbd>Enter</kbd> {t("Paste")}</span>
+                <span className="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t("Plain")}</span>
               </>
             ) : (
               <>
-                <span className="hint"><kbd>←</kbd><kbd>→</kbd> Navigate</span>
-                <span className="hint"><kbd>Space</kbd> Full content</span>
-                <span className="hint"><kbd>Enter</kbd> Paste</span>
-                <span className="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Plain</span>
-                <span className="hint"><kbd>Ctrl</kbd>+<kbd>P</kbd> Pin</span>
-                <span className="hint"><kbd>Del</kbd> Delete</span>
-                <span className="hint"><kbd>Tab</kbd> Filter</span>
-                <span className="hint"><kbd>Esc</kbd> Close</span>
+                <span className="hint"><kbd>←</kbd><kbd>→</kbd> {t("Navigate")}</span>
+                <span className="hint"><kbd>Space</kbd> {t("Full content")}</span>
+                <span className="hint"><kbd>Enter</kbd> {t("Paste")}</span>
+                <span className="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t("Plain")}</span>
+                <span className="hint"><kbd>Ctrl</kbd>+<kbd>P</kbd> {t("Pin")}</span>
+                <span className="hint"><kbd>Del</kbd> {t("Delete")}</span>
+                <span className="hint"><kbd>Tab</kbd> {t("Filter")}</span>
+                <span className="hint"><kbd>Esc</kbd> {t("Close")}</span>
               </>
             )}
           </footer>

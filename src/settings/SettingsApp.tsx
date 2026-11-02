@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { api } from "../lib/api";
+import { useT } from "../i18n";
 import type { Pinboard, Settings } from "../types";
 
 interface TrayIconOption {
@@ -9,6 +10,7 @@ interface TrayIconOption {
 }
 
 export default function SettingsApp() {
+  const t = useT();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pinboards, setPinboards] = useState<Pinboard[]>([]);
   const [recording, setRecording] = useState(false);
@@ -38,17 +40,24 @@ export default function SettingsApp() {
 
   return (
     <div className="settings-root">
-      <h1>Paste Settings</h1>
+      <h1>{t("Paste Settings")}</h1>
 
       <section className="settings-section">
-        <h2>General</h2>
-        <Row
-          label="Launch at login"
-          desc="Start Paste automatically when Windows starts"
-        >
+        <h2>{t("General")}</h2>
+        <Row label={t("Language")} desc={t("Follow the operating system language")}>
+          <select
+            value={settings.language || "system"}
+            onChange={(e) => update({ language: e.target.value })}
+          >
+            <option value="system">{t("System")}</option>
+            <option value="en">English</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </Row>
+        <Row label={t("Launch at login")} desc={t("Start Paste automatically when Windows starts")}>
           <Toggle on={settings.autostart} onChange={(v) => update({ autostart: v })} />
         </Row>
-        <Row label="Pause clipboard history" desc="Temporarily stop recording new copies">
+        <Row label={t("Pause clipboard history")} desc={t("Temporarily stop recording new copies")}>
           <Toggle
             on={settings.paused}
             onChange={() =>
@@ -59,70 +68,67 @@ export default function SettingsApp() {
             }
           />
         </Row>
-        <Row label="Paste as plain text by default" desc="Strip formatting when pasting rich content">
+        <Row label={t("Paste as plain text by default")} desc={t("Strip formatting when pasting rich content")}>
           <Toggle on={settings.alwaysPlainText} onChange={(v) => update({ alwaysPlainText: v })} />
         </Row>
-        <Row label="Appearance" desc="Panel theme">
+        <Row label={t("Appearance")} desc={t("Panel theme")}>
           <select
             value={settings.theme}
             onChange={(e) => update({ theme: e.target.value })}
           >
-            <option value="system">System</option>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
+            <option value="system">{t("System")}</option>
+            <option value="dark">{t("Dark")}</option>
+            <option value="light">{t("Light")}</option>
           </select>
         </Row>
         <Row
-          label="Panel position"
-          desc="Vertical placement — always on the screen you're working on"
+          label={t("Panel position")}
+          desc={t("Vertical placement — always on the screen you're working on")}
         >
           <select
             value={settings.panelPosition || "center"}
             onChange={(e) => update({ panelPosition: e.target.value })}
           >
-            <option value="center">Center of screen</option>
-            <option value="top">Top of screen</option>
-            <option value="bottom">Bottom of screen</option>
+            <option value="center">{t("Center of screen")}</option>
+            <option value="top">{t("Top of screen")}</option>
+            <option value="bottom">{t("Bottom of screen")}</option>
           </select>
         </Row>
-        <Row
-          label="Wheel direction"
-          desc="Mouse wheel over the history cards"
-        >
+        <Row label={t("Wheel direction")} desc={t("Mouse wheel over the history cards")}>
           <select
             value={settings.wheelDirection || "default"}
             onChange={(e) => update({ wheelDirection: e.target.value })}
           >
-            <option value="default">Down = browse older (scroll right)</option>
-            <option value="natural">Down = browse newer (scroll left)</option>
+            <option value="default">{t("Down = browse older (scroll right)")}</option>
+            <option value="natural">{t("Down = browse newer (scroll left)")}</option>
           </select>
         </Row>
       </section>
 
       <section className="settings-section">
-        <h2>Tray icon</h2>
+        <h2>{t("Tray icon")}</h2>
         <div className="tray-grid">
-          {trayIcons.map((t) => (
+          {trayIcons.map((ti) => (
             <button
-              key={t.id}
-              className={`tray-option ${(settings.trayIcon || "classic") === t.id ? "active" : ""}`}
-              title={t.id}
-              onClick={() => update({ trayIcon: t.id })}
+              key={ti.id}
+              className={`tray-option ${(settings.trayIcon || "classic") === ti.id ? "active" : ""}`}
+              title={ti.id}
+              onClick={() => update({ trayIcon: ti.id })}
             >
-              <img src={`data:image/png;base64,${t.pngBase64}`} alt={t.id} draggable={false} />
-              <span>{t.id}</span>
+              <img src={`data:image/png;base64,${ti.pngBase64}`} alt={ti.id} draggable={false} />
+              <span>{ti.id}</span>
             </button>
           ))}
         </div>
       </section>
 
       <section className="settings-section">
-        <h2>Shortcuts</h2>
-        <Row label="Open Paste" desc="Global shortcut to show or hide the clipboard panel">
+        <h2>{t("Shortcuts")}</h2>
+        <Row label={t("Open Paste")} desc={t("Global shortcut to show or hide the clipboard panel")}>
           {recording ? (
             <input
               className="hotkey-box recording"
-              value="Press keys…"
+              value={t("Press keys…")}
               readOnly
               autoFocus
               onKeyDown={(e) => {
@@ -142,31 +148,31 @@ export default function SettingsApp() {
           )}
         </Row>
         <Row
-          label="Quick paste shortcuts"
-          desc="Ctrl+1…9 paste the most recent clips without opening the panel"
+          label={t("Quick paste shortcuts")}
+          desc={t("Ctrl+1…9 paste the most recent clips without opening the panel")}
         >
           <Toggle on={settings.quickPaste} onChange={(v) => update({ quickPaste: v })} />
         </Row>
       </section>
 
       <section className="settings-section">
-        <h2>History</h2>
-        <Row label="Keep at most" desc="Oldest unpinned clips are removed beyond this limit">
+        <h2>{t("History")}</h2>
+        <Row label={t("Keep at most")} desc={t("Oldest unpinned clips are removed beyond this limit")}>
           <select
             value={String(settings.maxClips)}
             onChange={(e) => update({ maxClips: Number(e.target.value) })}
           >
-            <option value="0">Unlimited</option>
-            <option value="100">100 clips</option>
-            <option value="500">500 clips</option>
-            <option value="1000">1000 clips</option>
-            <option value="5000">5000 clips</option>
+            <option value="0">{t("Unlimited")}</option>
+            <option value="100">{t("100 clips")}</option>
+            <option value="500">{t("500 clips")}</option>
+            <option value="1000">{t("1000 clips")}</option>
+            <option value="5000">{t("5000 clips")}</option>
           </select>
         </Row>
         <div className="settings-actions">
           {confirmingClear ? (
             <>
-              <span className="confirm-inline-msg">Clear all history? Pinned items are kept.</span>
+              <span className="confirm-inline-msg">{t("Clear all history? Pinned items are kept.")}</span>
               <button
                 className="btn danger"
                 onClick={() => {
@@ -174,26 +180,26 @@ export default function SettingsApp() {
                   setConfirmingClear(false);
                 }}
               >
-                Confirm
+                {t("Confirm")}
               </button>
               <button className="btn" onClick={() => setConfirmingClear(false)}>
-                Cancel
+                {t("Cancel")}
               </button>
             </>
           ) : (
             <button className="btn danger" onClick={() => setConfirmingClear(true)}>
-              Clear History
+              {t("Clear History")}
             </button>
           )}
         </div>
       </section>
 
       <section className="settings-section">
-        <h2>Excluded Apps</h2>
+        <h2>{t("Excluded Apps")}</h2>
         <div className="setting-row" style={{ paddingBottom: 0 }}>
           <div className="setting-label">
-            Copies made inside these apps are never recorded
-            <span className="desc">Use the executable file name, e.g. 1password.exe</span>
+            {t("Copies made inside these apps are never recorded")}
+            <span className="desc">{t("Use the executable file name, e.g. 1password.exe")}</span>
           </div>
         </div>
         <div className="excluded-list">
@@ -239,13 +245,13 @@ export default function SettingsApp() {
               }
             }}
           >
-            Add
+            {t("Add")}
           </button>
         </div>
       </section>
 
       <section className="settings-section">
-        <h2>Pinboards</h2>
+        <h2>{t("Pinboards")}</h2>
         <div className="excluded-list">
           {pinboards.map((p) => (
             <span className="excluded-chip" key={p.id}>
@@ -254,7 +260,7 @@ export default function SettingsApp() {
                 <span className="confirm-inline">
                   <button
                     className="yes"
-                    title="Delete — clips return to history"
+                    title={t("Delete — clips return to history")}
                     onClick={() => {
                       api.deletePinboard(p.id).then(() => {
                         setPinboards((bs) => bs.filter((b) => b.id !== p.id));
@@ -264,7 +270,7 @@ export default function SettingsApp() {
                   >
                     ✓
                   </button>
-                  <button className="no" title="Cancel" onClick={() => setPendingDelBoard(null)}>
+                  <button className="no" title={t("Cancel")} onClick={() => setPendingDelBoard(null)}>
                     ✕
                   </button>
                 </span>
@@ -275,14 +281,14 @@ export default function SettingsApp() {
           ))}
           {pinboards.length === 0 && (
             <span style={{ color: "var(--text-faint)", fontSize: 12 }}>
-              Create pinboards from the panel sidebar.
+              {t("Create pinboards from the panel sidebar.")}
             </span>
           )}
         </div>
       </section>
 
       <section className="settings-section">
-        <h2>About</h2>
+        <h2>{t("About")}</h2>
         <div className="about-head">
           <img src="/app-icon.png" alt="Paste" className="about-icon" />
           <div>
@@ -290,18 +296,18 @@ export default function SettingsApp() {
             <div className="about-version">Version {version}</div>
           </div>
         </div>
-        <Row label="Build" desc="Compiler profile this binary was built with">
+        <Row label={t("Build")} desc={t("Compiler profile this binary was built with")}>
           <span className="about-value">
             {import.meta.env.TAURI_ENV_DEBUG === "true" ? "Debug (dev)" : "Release (optimized)"}
           </span>
         </Row>
-        <Row label="Built at" desc="Timestamp of this build">
+        <Row label={t("Built at")} desc={t("Timestamp of this build")}>
           <span className="about-value">{formatBuildDate(__BUILD_DATE__)}</span>
         </Row>
-        <Row label="Commit" desc="Source revision this build was produced from">
+        <Row label={t("Commit")} desc={t("Source revision this build was produced from")}>
           <span className="about-value mono">{__GIT_SHA__}</span>
         </Row>
-        <Row label="Platform" desc="Operating system and CPU architecture">
+        <Row label={t("Platform")} desc={t("Operating system and CPU architecture")}>
           <span className="about-value">
             {import.meta.env.TAURI_ENV_OS || "windows"}{" "}
             {import.meta.env.TAURI_ENV_PLATFORM_VERSION || ""} ·{" "}
@@ -311,8 +317,8 @@ export default function SettingsApp() {
       </section>
 
       <p style={{ color: "var(--text-faint)", fontSize: 11.5 }}>
-        Paste for Windows — a desktop clipboard manager inspired by Paste for macOS.
-        Data stays on this machine.
+        {t("Paste for Windows — a desktop clipboard manager inspired by Paste for macOS.")}
+        {t("Data stays on this machine.")}
       </p>
     </div>
   );

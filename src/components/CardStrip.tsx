@@ -1,5 +1,6 @@
 import { useStore } from "../store/useStore";
 import ClipboardCard from "./ClipboardCard";
+import { useT } from "../i18n";
 
 export default function CardStrip() {
   const clips = useStore((s) => s.clips);
@@ -38,14 +39,15 @@ export default function CardStrip() {
 }
 
 function EmptyState({ query }: { query: string }) {
+  const t = useT();
   return (
     <div className="empty-state">
       <ClipboardGlyph />
-      <h2>{query ? "No matches found" : "Your clipboard history is empty"}</h2>
+      <h2>{query ? t("No matches found") : t("Your clipboard history is empty")}</h2>
       <p>
         {query
-          ? `Nothing in your history matches “${query}”.`
-          : "Copy something anywhere in Windows and it will show up here instantly."}
+          ? t("No matches found")
+          : t("Copy something anywhere in Windows and it will show up here instantly.")}
       </p>
     </div>
   );

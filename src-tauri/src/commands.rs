@@ -149,6 +149,7 @@ pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), Str
     }
     crate::apply_shortcuts(&app).map_err(|e| e.to_string())?;
     crate::apply_tray_icon(&app, &new_settings.tray_icon);
+    crate::refresh_tray(&app); // tray menu labels follow the language setting
     // Keep autostart in sync with the toggle.
     use tauri_plugin_autostart::ManagerExt;
     let launcher = app.autolaunch();

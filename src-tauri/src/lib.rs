@@ -33,6 +33,44 @@ const TRAY_ICON_SETS: &[(&str, &[u8])] = &[
     ("pearl", include_bytes!("../icons/tray/pearl.png")),
 ];
 
+/// Resolved UI language for native-side strings (tray menu).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Lang {
+    En,
+    Zh,
+}
+
+fn tray_lang(app: &AppHandle) -> Lang {
+    let pref = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .unwrap()
+        .language
+        .clone();
+    let zh = match pref.as_str() {
+        "zh" => true,
+        "en" => false,
+        _ => sys_locale::get_locale()
+            .map(|l| l.to_lowercase().starts_with("zh"))
+            .unwrap_or(false),
+    };
+    if zh { Lang::Zh } else { Lang::En }
+}
+
+fn labels_open(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "打开 Paste" } else { "Open Paste" }
+}
+fn labels_pause(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "暂停剪贴板历史" } else { "Pause clipboard history" }
+}
+fn labels_settings(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "设置…" } else { "Settings…" }
+}
+fn labels_quit(lang: Lang) -> &'static str {
+    if lang == Lang::Zh { "退出 Paste" } else { "Quit Paste" }
+}
+
 fn tray_icon_image(name: &str) -> tauri::image::Image<'static> {
     let bytes = TRAY_ICON_SETS
         .iter()
@@ -478,17 +516,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .unwrap()
         .tray_icon
         .clone();
-    let open = MenuItem::with_id(app, "open", "Open Paste", true, None::<&str>)?;
+    let lang = tray_lang(app);
+        let open = MenuItem::with_id(app, "open", labels_open(lang), true, None::<&str>)?;
     let pause = CheckMenuItem::with_id(
         app,
         "pause",
-        "Pause clipboard history",
+        labels_pause(lang),
         true,
         paused,
         None::<&str>,
     )?;
-    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Paste", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", labels_settings(lang), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", labels_quit(lang), true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &pause, &settings_item, &quit])?;
 
     TrayIconBuilder::with_id("tray")
@@ -531,19 +570,20 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn refresh_tray(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("tray") {
         let paused = app.state::<AppState>().paused.load(Ordering::Relaxed);
-        let open = MenuItem::with_id(app, "open", "Open Paste", true, None::<&str>).unwrap();
+        let lang = tray_lang(app);
+        let open = MenuItem::with_id(app, "open", labels_open(lang), true, None::<&str>).unwrap();
         let pause = CheckMenuItem::with_id(
             app,
             "pause",
-            "Pause clipboard history",
+            labels_pause(lang),
             true,
             paused,
             None::<&str>,
         )
         .unwrap();
         let settings_item =
-            MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>).unwrap();
-        let quit = MenuItem::with_id(app, "quit", "Quit Paste", true, None::<&str>).unwrap();
+            MenuItem::with_id(app, "settings", labels_settings(lang), true, None::<&str>).unwrap();
+        let quit = MenuItem::with_id(app, "quit", labels_quit(lang), true, None::<&str>).unwrap();
         let menu = Menu::with_items(app, &[&open, &pause, &settings_item, &quit]).unwrap();
         let _ = tray.set_menu(Some(menu));
     }

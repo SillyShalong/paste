@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useStore } from "../store/useStore";
 import { api } from "../lib/api";
+import { useT } from "../i18n";
 
 export default function Sidebar() {
+  const t = useT();
   const open = useStore((s) => s.sidebarOpen);
   const pinboards = useStore((s) => s.pinboards);
   const view = useStore((s) => s.view);
@@ -24,12 +26,12 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-title">Pinboards</div>
+      <div className="sidebar-title">{t("Pinboards")}</div>
       <button
         className={`board-item ${view.type === "history" ? "active" : ""}`}
         onClick={() => setView({ type: "history" })}
       >
-        <ClockIcon /> History
+        <ClockIcon /> {t("History")}
       </button>
       {pinboards.map((p) => (
         <div
@@ -43,7 +45,7 @@ export default function Sidebar() {
             <span className="board-del-confirm" onMouseDown={(e) => e.stopPropagation()}>
               <button
                 className="yes"
-                title="Delete pinboard — clips return to history"
+                title={t("Delete pinboard — clips return to history")}
                 onClick={(e) => {
                   e.stopPropagation();
                   useStore.getState().deletePinboard(p.id);
@@ -66,7 +68,7 @@ export default function Sidebar() {
           ) : (
             <button
               className="board-del"
-              title="Delete pinboard"
+              title={t("Delete pinboard")}
               onClick={(e) => {
                 e.stopPropagation();
                 setPendingDel(p.id);
@@ -81,7 +83,7 @@ export default function Sidebar() {
         <input
           className="board-input"
           autoFocus
-          placeholder="Pinboard name…"
+          placeholder={t("Pinboard name…")}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => {
@@ -95,12 +97,12 @@ export default function Sidebar() {
         />
       ) : (
         <button className="board-item add" onClick={() => setCreating(true)}>
-          + New Pinboard
+          {t("+ New Pinboard")}
         </button>
       )}
       <div className="spacer" />
       <div className="sidebar-foot">
-        <button onClick={() => api.openSettings()}>Settings…</button>
+        <button onClick={() => api.openSettings()}>{t("Settings…")}</button>
       </div>
     </aside>
   );

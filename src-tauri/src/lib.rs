@@ -157,10 +157,13 @@ pub fn run() {
 fn force_focus_panel(panel: &tauri::WebviewWindow) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        INPUT_KEYBOARD, SetFocus, VK_MENU,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
     };
-    let _ = panel.set_focus();
     let Some(hwnd) = panel.hwnd().ok().map(|h| h.0 as isize) else { return };
     unsafe {
         let hwnd = HWND(hwnd as *mut _);
@@ -182,15 +185,73 @@ fn force_focus_panel(panel: &tauri::WebviewWindow) {
         } else {
             false.into()
         };
+
+        // While the input queues are attached, focus calls are allowed.
+        let _ = panel.set_focus();
         let _ = SetForegroundWindow(hwnd);
+        let _ = SetFocus(hwnd);
+
         if attached_target.as_bool() {
             AttachThreadInput(current_thread, target_thread, false);
         }
         if attached_fg.as_bool() {
             AttachThreadInput(current_thread, fg_thread, false);
         }
+
+        // Last resort: a stray Alt tap unlocks SetForegroundWindow when the
+        // foreground lock is still refusing the hand-off.
+        if GetForegroundWindow().0 != hwnd.0 {
+            let mk = |flags: KEYBD_EVENT_FLAGS| INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: flags,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            };
+            let _ = SendInput(
+                &[mk(KEYBD_EVENT_FLAGS(0)), mk(KEYEVENTF_KEYUP)],
+                std::mem::size_of::<INPUT>() as i32,
+            );
+            let _ = SetForegroundWindow(hwnd);
+        }
     }
 }
+
+/// Watchdog hiding the panel when it stops being the foreground window.
+/// The blur-based auto-hide only fires if the panel actually received
+/// keyboard focus; when a focus hand-off was refused by Windows this poll
+/// keeps the "click outside closes the panel" behavior regardless.
+#[cfg(windows)]
+fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow) {
+    let Ok(panel_hwnd) = panel.hwnd().map(|h| h.0 as isize) else { return };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Grace period while the focus hand-off settles.
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        loop {
+            let Some(panel) = app.get_webview_window("panel") else { return };
+            if !panel.is_visible().unwrap_or(false) {
+                return;
+            }
+            let fg = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize
+            };
+            if fg != panel_hwnd {
+                let _ = panel.hide();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn spawn_panel_foreground_watcher(_app: &AppHandle, _panel: &tauri::WebviewWindow) {}
 
 #[cfg(not(windows))]
 fn force_focus_panel(_panel: &tauri::WebviewWindow) {}
@@ -365,6 +426,7 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
     let _ = panel.show();
     force_focus_panel(panel);
     let _ = app.emit_to("panel", "panel:opened", ());
+    spawn_panel_foreground_watcher(app, panel);
 }
 
 /// Physical monitor area (x, y, width, height) for the given window; falls

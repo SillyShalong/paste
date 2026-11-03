@@ -318,10 +318,12 @@ fn foreground_window() -> Option<isize> {
 
 /// macOS: the frontmost app's PID. NSWorkspace is main-thread-only, so this
 /// dispatches through `on_main_sync` (inline when already on the main
-/// thread, e.g. when called from the global-shortcut handler).
+/// thread, e.g. when called from the global-shortcut handler). Uses the
+/// lightweight PID-only probe — the full app info (icon extraction) is
+/// fetched separately by the capture pipeline when a copy actually happens.
 #[cfg(target_os = "macos")]
 fn foreground_window() -> Option<isize> {
-    crate::state::on_main_sync(|| unsafe { crate::macos::frontmost_pid() }).flatten()
+    crate::state::on_main_sync(crate::macos::frontmost_process_id).flatten()
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]

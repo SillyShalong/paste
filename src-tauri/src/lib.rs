@@ -42,6 +42,51 @@ fn acquire_single_instance_lock() -> bool {
     }
 }
 
+/// Single instance for macOS: flock(2) on a lock file in the app's support
+/// directory. A second concurrent instance would run a second clipboard
+/// listener — two captures fighting over the store, double paste synthesis.
+/// The fd is never closed on purpose: holding it open holds the lock, and
+/// the OS releases both when the process exits.
+#[cfg(target_os = "macos")]
+fn acquire_single_instance_lock() -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    extern "C" {
+        fn open(path: *const std::ffi::c_char, flags: i32, ...) -> i32;
+        fn flock(fd: i32, operation: i32) -> i32;
+        fn close(fd: i32) -> i32;
+    }
+    const O_RDWR: i32 = 0x0002;
+    const O_CREAT: i32 = 0x0200;
+    const LOCK_EX: i32 = 2;
+    const LOCK_NB: i32 = 4;
+
+    let Some(home) = std::env::var_os("HOME") else {
+        return true; // nowhere to put the lock — don't block startup
+    };
+    let dir = std::path::PathBuf::from(home)
+        .join("Library/Application Support/com.pasteclone.app");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return true;
+    }
+    let path = dir.join("single-instance.lock");
+    let Ok(cpath) = CString::new(path.as_os_str().as_bytes()) else {
+        return true;
+    };
+    unsafe {
+        let fd = open(cpath.as_ptr(), O_CREAT | O_RDWR, 0o644);
+        if fd < 0 {
+            return true; // can't even open the lock file — don't block startup
+        }
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd);
+            return false;
+        }
+        true // fd deliberately left open: keeping it holds the lock
+    }
+}
+
 /// Selectable tray icon variants (embedded at compile time).
 const TRAY_ICON_SETS: &[(&str, &[u8])] = &[
     ("classic", include_bytes!("../icons/tray/classic.png")),
@@ -110,11 +155,11 @@ pub fn apply_tray_icon(app: &AppHandle, name: &str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Single instance: a second concurrent launch would fight over the
-    // WebView2 user-data folder and abort with 0x800700AA ("resource in
-    // use") at startup — and each crash leaves zombie browser processes
-    // that keep the folder locked for every later launch.
-    #[cfg(windows)]
+    // Single instance: on Windows a second concurrent launch would fight
+    // over the WebView2 user-data folder and abort with 0x800700AA
+    // ("resource in use") at startup; on macOS it would run a second
+    // clipboard listener against the same store. Either way: exit early.
+    #[cfg(any(windows, target_os = "macos"))]
     if !acquire_single_instance_lock() {
         eprintln!("[paste] another instance is already running; exiting");
         return;
@@ -289,10 +334,47 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
     });
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn spawn_panel_foreground_watcher(_app: &AppHandle, _panel: &tauri::WebviewWindow) {}
 
-#[cfg(not(windows))]
+/// macOS watchdog: same guarantee as the Windows foreground watcher — when
+/// the frontmost app is no longer ours, the panel hides, even if the blur
+/// event never fired (clicks that take activation away without delivering a
+/// usable focus hand-off to a borderless panel). NSWorkspace needs the main
+/// thread; each poll is a cheap PID read via `frontmost_process_id`.
+#[cfg(target_os = "macos")]
+fn spawn_panel_foreground_watcher(app: &AppHandle, _panel: &tauri::WebviewWindow) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Grace period while the focus hand-off settles.
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let mine = std::process::id() as isize;
+        loop {
+            let Some(panel) = app.get_webview_window("panel") else { return };
+            if !panel.is_visible().unwrap_or(false) {
+                return;
+            }
+            let front = crate::state::on_main_sync(crate::macos::frontmost_process_id).flatten();
+            if let Some(front) = front {
+                if front != mine {
+                    eprintln!("[paste] watchdog: frontmost pid {front} != {mine}; hiding panel");
+                    let _ = panel.hide();
+                    return;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+    });
+}
+
+/// Windows forces focus through the input-queue attach so the blur watchdog
+/// has something to work with; on macOS making the panel key is enough.
+#[cfg(target_os = "macos")]
+fn force_focus_panel(panel: &tauri::WebviewWindow) {
+    let _ = panel.set_focus();
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn force_focus_panel(_panel: &tauri::WebviewWindow) {}
 
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {

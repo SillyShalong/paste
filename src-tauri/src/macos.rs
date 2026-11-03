@@ -363,8 +363,25 @@ pub unsafe fn frontmost_app_info() -> Option<FrontmostInfo> {
     })
 }
 
-pub fn frontmost_pid() -> Option<isize> {
-    unsafe { frontmost_app_info().map(|i| i.pid) }
+/// PID of the frontmost app WITHOUT touching NSImage/icon data — the full
+/// `frontmost_app_info` extracts and re-encodes the app icon (megabytes),
+/// which is fine once per panel open but far too heavy for the 150 ms
+/// foreground watchdog. Must run on the main thread (go through
+/// `state::on_main_sync`); NSWorkspace itself is called inside a pool.
+pub fn frontmost_process_id() -> Option<isize> {
+    with_pool(|| unsafe {
+        let ws: *const AnyObject = msg0(cls("NSWorkspace"), sel("sharedWorkspace"));
+        let app: *const AnyObject = msg0(ws, sel("frontmostApplication"));
+        if app.is_null() {
+            return None;
+        }
+        let pid: i32 = msg0(app, sel("processIdentifier"));
+        if pid == 0 {
+            None
+        } else {
+            Some(pid as isize)
+        }
+    })
 }
 
 /// Activate the app owning `pid`. NSRunningApplication is thread-safe.

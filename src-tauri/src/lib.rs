@@ -187,6 +187,12 @@ pub fn run() {
             // dispatch for AppKit work).
             let _ = state::APP_HANDLE.set(app.handle().clone());
 
+            #[cfg(target_os = "macos")]
+            eprintln!(
+                "[paste] startup: accessibility_trusted={}",
+                crate::macos::ax_trusted()
+            );
+
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
 

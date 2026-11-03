@@ -164,6 +164,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_initial,
             commands::list_tray_icons,
+            commands::read_file_image,
             commands::list_clips,
             commands::paste_clip,
             commands::delete_clip,

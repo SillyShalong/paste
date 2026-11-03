@@ -363,6 +363,21 @@ html, body, #root {
 .link-host { font-size: 15px; font-weight: 700; }
 .detail-img img { max-width: none; max-height: none; border-radius: 6px; }
 .detail-files { display: flex; flex-direction: column; gap: 4px; }
+.detail-file-image { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.detail-file-image img {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 6px;
+  align-self: center;
+}
+.detail-file-image figcaption {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  word-break: break-all;
+  user-select: text;
+}
 .file-path-row {
   padding: 6px 10px;
   border-radius: 7px;
@@ -558,6 +573,31 @@ html, body, #root {
 
 /* file cards */
 .preview.files { display: flex; flex-direction: column; gap: 6px; }
+/* file clips that point at image files: show the picture, not the path */
+.preview.file-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  overflow: hidden;
+}
+.preview.file-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.preview.file-image .file-image-more {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+}
 .file-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .file-ext {
   flex-shrink: 0;

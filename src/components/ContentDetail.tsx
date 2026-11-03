@@ -3,6 +3,7 @@ import type { Clip } from "../types";
 import { useStore } from "../store/useStore";
 import { api, convertFileSrc } from "../lib/api";
 import { useT } from "../i18n";
+import { isImagePath, parseClipPaths, useImageData } from "./card/FilePreview";
 
 /// Full-content preview for the selected clip, opened with Space. Scrollable,
 /// selectable, with paste actions — closes with Space or Esc.
@@ -74,11 +75,17 @@ function Body({ clip }: { clip: Clip }) {
         <div className="detail-text">{t("Image unavailable")}</div>
       );
     case "file": {
-      let paths: string[] = [];
-      try {
-        paths = clip.files ? JSON.parse(clip.files) : [];
-      } catch {
-        /* ignore */
+      const paths = parseClipPaths(clip);
+      // Image files show the picture itself at natural size; everything
+      // else keeps the plain path rows.
+      if (paths.length > 0 && paths.every(isImagePath)) {
+        return (
+          <div className="detail-files">
+            {paths.map((p) => (
+              <DetailFileImage key={p} path={p} />
+            ))}
+          </div>
+        );
       }
       return (
         <div className="detail-files">
@@ -106,4 +113,16 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/// One image file inside the full-content preview: natural-size picture with
+/// its path as the caption; falls back to the path row when unreadable.
+function DetailFileImage({ path }: { path: string }) {
+  const dataUrl = useImageData(path);
+  return (
+    <figure className="detail-file-image">
+      {dataUrl && <img src={dataUrl} alt="" draggable={false} />}
+      <figcaption>{path}</figcaption>
+    </figure>
+  );
 }

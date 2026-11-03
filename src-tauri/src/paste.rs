@@ -68,6 +68,12 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
     if let Some(panel) = app.get_webview_window("panel") {
         let _ = panel.hide();
     }
+    // macOS app activation is asynchronous and can take a few hundred ms —
+    // the synthesized keystroke must land after the target is actually key
+    // again, or it goes to whatever still holds focus.
+    #[cfg(target_os = "macos")]
+    std::thread::sleep(Duration::from_millis(150));
+    #[cfg(not(target_os = "macos"))]
     std::thread::sleep(Duration::from_millis(60));
 
     send_paste_to(false, None);
@@ -288,6 +294,11 @@ fn send_paste_to(restore: bool, target: Option<isize>) {
                 std::thread::sleep(Duration::from_millis(120));
             }
         }
+        let front = crate::state::on_main_sync(macos::frontmost_process_id).flatten();
+        eprintln!(
+            "[paste] sending Cmd+V: ax_trusted={} frontmost={front:?}",
+            macos::ax_trusted()
+        );
         unsafe {
             macos::post_cmd_v();
         }

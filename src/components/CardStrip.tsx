@@ -1,4 +1,5 @@
 import { useStore } from "../store/useStore";
+import { osName } from "../lib/platform";
 import ClipboardCard from "./ClipboardCard";
 import { useT } from "../i18n";
 
@@ -47,7 +48,7 @@ function EmptyState({ query }: { query: string }) {
       <p>
         {query
           ? t("No matches found")
-          : t("Copy something anywhere in Windows and it will show up here instantly.")}
+          : t(`Copy something anywhere in ${osName} and it will show up here instantly.`)}
       </p>
     </div>
   );

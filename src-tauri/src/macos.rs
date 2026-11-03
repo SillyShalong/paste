@@ -346,7 +346,7 @@ pub unsafe fn frontmost_app_info() -> Option<FrontmostInfo> {
             if i.is_null() {
                 None
             } else {
-                let tiff: *const AnyObject = msg0(i, sel("tiffRepresentation"));
+                let tiff: *const AnyObject = msg0(i, sel("TIFFRepresentation"));
                 if tiff.is_null() {
                     None
                 } else {
@@ -378,7 +378,7 @@ pub fn activate_pid(pid: isize) -> bool {
         if app.is_null() {
             return false;
         }
-        msg1(app, sel("activateFromOptions:"), NS_APP_ACTIVATE_IGNORING_OTHER_APPS)
+        msg1(app, sel("activateWithOptions:"), NS_APP_ACTIVATE_IGNORING_OTHER_APPS)
     })
 }
 

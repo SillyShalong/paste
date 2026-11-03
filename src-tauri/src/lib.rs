@@ -151,47 +151,13 @@ pub fn run() {
             // failure — 0x800700AA right after a runtime update — can be
             // retried; if the machine stays busy the app keeps running with
             // tray + history capture and the panel can be created lazily.
-            let panel = {
-                let mut built = None;
-                for attempt in 1..=5 {
-                    match tauri::WebviewWindowBuilder::new(
-                        app,
-                        "panel",
-                        tauri::WebviewUrl::App("index.html".into()),
-                    )
-                    .title("Paste")
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .visible(false)
-                    .skip_taskbar(true)
-                    .resizable(false)
-                    .shadow(false)
-                    .build()
-                    {
-                        Ok(w) => {
-                            built = Some(w);
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "[paste] panel create attempt {}/5 failed: {}",
-                                attempt, e
-                            );
-                            std::thread::sleep(std::time::Duration::from_secs(4));
-                        }
-                    }
-                }
-                match built {
-                    Some(w) => w,
-                    None => {
-                        eprintln!(
-                            "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry"
-                        );
-                        return Ok(());
-                    }
-                }
-            };
+            // Same helper as the tray retry path so the autohide behavior is
+            // registered no matter which path built the window.
+            if let Err(e) = create_panel(app.handle()) {
+                eprintln!(
+                    "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry: {e}"
+                );
+            }
 
             Ok(())
         })
@@ -473,6 +439,9 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
     // monitor is where the user is working, so that's where the panel goes.
     paste::capture_foreground(app);
     let prev = *state.prev_hwnd.lock().unwrap();
+    // macOS placement keys off the cursor monitor instead of prev's window.
+    #[cfg(not(windows))]
+    let _ = prev;
 
     #[cfg(windows)]
     if let Some((mx, my, mw, mh)) = monitor_area_for(prev) {
@@ -490,7 +459,28 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
         let _ = panel.set_size(tauri::PhysicalSize::new(mw as u32, target_h as u32));
         let _ = panel.set_position(tauri::PhysicalPosition::new(mx, y));
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // Land on the screen the user is working on: the monitor containing
+        // the cursor when we can get it, else the primary monitor.
+        let monitor = monitor_with_cursor(panel)
+            .or_else(|| panel.primary_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let scale = monitor.scale_factor();
+            let size = monitor.size();
+            let pos = monitor.position();
+            let target_h = (PANEL_HEIGHT * scale).round() as i32;
+            let margin = (12.0 * scale).round() as i32;
+            let y = match pos_pref.as_str() {
+                "top" => pos.y + margin,
+                "bottom" => pos.y + size.height as i32 - target_h - margin,
+                _ => pos.y + (size.height as i32 - target_h) / 2,
+            };
+            let _ = panel.set_size(tauri::PhysicalSize::new(size.width, target_h as u32));
+            let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, y));
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     if let Ok(Some(monitor)) = panel.primary_monitor() {
         let scale = monitor.scale_factor();
         let size = monitor.size();
@@ -544,6 +534,21 @@ fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
 #[cfg(not(windows))]
 fn monitor_area_for(_prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
     None
+}
+
+/// The monitor currently containing the mouse cursor (macOS helper for
+/// panel placement — the closest cross-platform stand-in for "the screen
+/// the user is working on").
+#[cfg(target_os = "macos")]
+fn monitor_with_cursor(panel: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    let cursor = panel.cursor_position().ok()?;
+    panel.available_monitors().ok()?.into_iter().find(|m| {
+        let p = m.position();
+        let s = m.size();
+        let (x, y) = (p.x as f64, p.y as f64);
+        let (w, h) = (s.width as f64, s.height as f64);
+        cursor.x >= x && cursor.x < x + w && cursor.y >= y && cursor.y < y + h
+    })
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

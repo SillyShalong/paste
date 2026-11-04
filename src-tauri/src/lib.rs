@@ -181,6 +181,12 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // macOS is a menu-bar app: tray icon on top, no Dock icon.
+            // The accessory activation policy must be set before the event
+            // loop starts, which the setup hook is in time for.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let state = AppState::new(app.handle())?;
             app.manage(state);
             // Needed before the clipboard listener starts (macOS main-thread

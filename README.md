@@ -243,7 +243,6 @@ standalone probe of the macOS AppKit bindings.
 - [x] Settings localization (English / 简体中文)
 - [ ] Paste Stack (queue multiple clips, paste in order)
 - [ ] OCR search inside images
-- [ ] 日本語 localization
 
 ## 🙏 Acknowledgements
 

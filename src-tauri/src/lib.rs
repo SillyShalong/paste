@@ -249,7 +249,7 @@ fn force_focus_panel(panel: &tauri::WebviewWindow) {
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        INPUT_KEYBOARD, SetFocus, VK_MENU,
+        INPUT_KEYBOARD, VK_MENU,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
@@ -277,9 +277,12 @@ fn force_focus_panel(panel: &tauri::WebviewWindow) {
         };
 
         // While the input queues are attached, focus calls are allowed.
-        let _ = panel.set_focus();
+        // NOTE: SetForegroundWindow targets the top-level wrapper; the actual
+        // keyboard focus must end on the WebView2 CHILD window (panel.set_focus
+        // does that). Calling SetFocus on the wrapper here steals focus from
+        // the child, the webview fires blur, and the panel instantly hides.
         let _ = SetForegroundWindow(hwnd);
-        let _ = SetFocus(hwnd);
+        let _ = panel.set_focus();
 
         if attached_target.as_bool() {
             AttachThreadInput(current_thread, target_thread, false);
@@ -322,16 +325,25 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
     let app = app.clone();
     std::thread::spawn(move || {
         // Grace period while the focus hand-off settles.
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        std::thread::sleep(std::time::Duration::from_millis(600));
         loop {
             let Some(panel) = app.get_webview_window("panel") else { return };
             if !panel.is_visible().unwrap_or(false) {
                 return;
             }
-            let fg = unsafe {
-                windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize
+            // Compare ROOT OWNERS: the foreground window may legitimately be a
+            // child of the panel (the WebView2 input window), which is not a
+            // reason to close.
+            let fg_root = unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetForegroundWindow, GA_ROOTOWNER};
+                let fg = GetForegroundWindow();
+                if fg.0.is_null() {
+                    0
+                } else {
+                    GetAncestor(fg, GA_ROOTOWNER).0 as isize
+                }
             };
-            if fg != panel_hwnd {
+            if fg_root != panel_hwnd {
                 let _ = panel.hide();
                 return;
             }

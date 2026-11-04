@@ -3,6 +3,8 @@ declare const __BUILD_DATE__: string;
 declare const __GIT_SHA__: string;
 
 interface ImportMetaEnv {
+  /// Vite dev/production flag (true under `npm run dev`).
+  readonly DEV: boolean;
   readonly TAURI_ENV_DEBUG: string;
   readonly TAURI_ENV_PLATFORM: string;
   readonly TAURI_ENV_ARCH: string;

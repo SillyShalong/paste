@@ -3,6 +3,7 @@ name: Tests & macOS (Apple Silicon)
 on:
   push:
     branches: [main, dev]
+    tags: ["v*"]
     paths-ignore:
       - "**.md"
   pull_request:
@@ -79,6 +80,10 @@ jobs:
       # "Privacy & Security → Accessibility" approval pasting needs.
       - name: Stable-sign the app bundle
         run: ./scripts/codesign-stable.sh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Paste.app
+      - name: Zip the .app bundle
+        run: |
+          cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
+          zip -q -r -y "Paste_${{ github.ref_name }}_aarch64.app.zip" Paste.app
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -86,13 +91,14 @@ jobs:
           if-no-files-found: error
           path: |
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.zip
 
-      # Tags additionally publish the .dmg on a GitHub Release.
+      # Tags additionally publish the .dmg + .app zip on a GitHub Release.
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.zip
           generate_release_notes: true

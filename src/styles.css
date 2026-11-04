@@ -116,6 +116,16 @@ html, body, #root {
   animation: panel-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
+/* macOS: the frosted blur comes from the native NSVisualEffectView window
+   material (instant, applied at window creation). CSS backdrop-filter over
+   a transparent WKWebView composes unreliably there — it engaged only
+   after a delayed layer rebuild, making the panel look opaque for the
+   first seconds. The translucent --bg tint above the native material. */
+.panel[data-platform="mac"] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(14px) scale(0.99); }
   to { opacity: 1; transform: none; }

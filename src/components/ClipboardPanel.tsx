@@ -1,5 +1,5 @@
 import { useStore } from "../store/useStore";
-import { modLabel } from "../lib/platform";
+import { isMac, modLabel } from "../lib/platform";
 import SearchBar from "./SearchBar";
 import Sidebar from "./Sidebar";
 import CardStrip from "./CardStrip";
@@ -16,7 +16,11 @@ export default function ClipboardPanel() {
   const detailClip = useStore((s) => s.clips.find((c) => c.id === s.detailClipId)) ?? null;
 
   return (
-    <div className="panel" data-theme={theme === "system" ? undefined : theme}>
+    <div
+      className="panel"
+      data-theme={theme === "system" ? undefined : theme}
+      data-platform={isMac ? "mac" : undefined}
+    >
       <div className="panel-body">
         <Sidebar />
         <div className="panel-main">

@@ -477,7 +477,7 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     let mut built = None;
     let mut last_err = None;
     for attempt in 1..=5 {
-        match tauri::WebviewWindowBuilder::new(
+        let builder = tauri::WebviewWindowBuilder::new(
             app,
             "panel",
             tauri::WebviewUrl::App("index.html".into()),
@@ -489,8 +489,23 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         .visible(false)
         .skip_taskbar(true)
         .resizable(false)
-        .shadow(false)
-        .build()
+        .shadow(false);
+
+        // macOS: frosted glass via the native NSVisualEffectView material.
+        // CSS backdrop-filter over a transparent WKWebView composes unreliably
+        // — the transparency only kicks in after a delayed layer rebuild,
+        // so the panel looked opaque for seconds after opening. The native
+        // vibrancy material exists from window creation and is instant.
+        #[cfg(target_os = "macos")]
+        let builder = builder.effects(tauri::utils::config::WindowEffectsConfig {
+            effects: vec![tauri::utils::WindowEffect::UnderWindowBackground],
+            state: None,
+            radius: None,
+            color: None,
+            interactive: false,
+        });
+
+        match builder.build()
         {
             Ok(w) => {
                 built = Some(w);

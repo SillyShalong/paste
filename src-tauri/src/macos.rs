@@ -346,7 +346,7 @@ pub unsafe fn frontmost_app_info() -> Option<FrontmostInfo> {
             if i.is_null() {
                 None
             } else {
-                let tiff: *const AnyObject = msg0(i, sel("tiffRepresentation"));
+                let tiff: *const AnyObject = msg0(i, sel("TIFFRepresentation"));
                 if tiff.is_null() {
                     None
                 } else {
@@ -363,8 +363,25 @@ pub unsafe fn frontmost_app_info() -> Option<FrontmostInfo> {
     })
 }
 
-pub fn frontmost_pid() -> Option<isize> {
-    unsafe { frontmost_app_info().map(|i| i.pid) }
+/// PID of the frontmost app WITHOUT touching NSImage/icon data — the full
+/// `frontmost_app_info` extracts and re-encodes the app icon (megabytes),
+/// which is fine once per panel open but far too heavy for the 150 ms
+/// foreground watchdog. Must run on the main thread (go through
+/// `state::on_main_sync`); NSWorkspace itself is called inside a pool.
+pub fn frontmost_process_id() -> Option<isize> {
+    with_pool(|| unsafe {
+        let ws: *const AnyObject = msg0(cls("NSWorkspace"), sel("sharedWorkspace"));
+        let app: *const AnyObject = msg0(ws, sel("frontmostApplication"));
+        if app.is_null() {
+            return None;
+        }
+        let pid: i32 = msg0(app, sel("processIdentifier"));
+        if pid == 0 {
+            None
+        } else {
+            Some(pid as isize)
+        }
+    })
 }
 
 /// Activate the app owning `pid`. NSRunningApplication is thread-safe.
@@ -378,7 +395,7 @@ pub fn activate_pid(pid: isize) -> bool {
         if app.is_null() {
             return false;
         }
-        msg1(app, sel("activateFromOptions:"), NS_APP_ACTIVATE_IGNORING_OTHER_APPS)
+        msg1(app, sel("activateWithOptions:"), NS_APP_ACTIVATE_IGNORING_OTHER_APPS)
     })
 }
 
@@ -390,23 +407,53 @@ pub fn pid_alive(pid: isize) -> bool {
 // Keyboard synthesis + Accessibility permission
 // ---------------------------------------------------------------------------
 
-unsafe fn post_key(key: u16, down: bool) -> bool {
-    let ev = CGEventCreateKeyboardEvent(null(), key, down);
-    if ev.is_null() {
-        return false;
-    }
-    CGEventPost(CG_HID_EVENT_TAP, ev);
-    CFRelease(ev);
-    true
+// kCGEventSourceStateCombinedSessionState / kCGEventFlagMaskCommand.
+const CG_EVENT_SOURCE_COMBINED_SESSION: u32 = 1;
+const CG_EVENT_FLAG_COMMAND: u64 = 1 << 20;
+
+extern "C" {
+    fn CGEventSourceCreate(state_id: u32) -> *const AnyObject;
+    fn CGEventSetFlags(event: *const AnyObject, flags: u64);
 }
 
 /// Synthesize Cmd+V into the system (requires Accessibility permission).
+///
+/// The naive approach — posting bare Command and V keycodes — does not work:
+/// `CGEventCreateKeyboardEvent` builds events with zero modifier flags, and
+/// a standalone Command keycode doesn't change the flags the target app sees
+/// on the following V event, which arrives as a plain "v". Every event is
+/// instead explicitly tagged with kCGEventFlagMaskCommand, posted from a
+/// combined-session source (what the system treats as real input), with
+/// Command pressed first so apps that track modifier transitions see a
+/// proper chord.
 pub fn post_cmd_v() -> bool {
     unsafe {
-        post_key(VK_COMMAND, true)
-            && post_key(VK_V, true)
-            && post_key(VK_V, false)
-            && post_key(VK_COMMAND, false)
+        let source = CGEventSourceCreate(CG_EVENT_SOURCE_COMBINED_SESSION);
+        let mut ok = true;
+
+        let chord_key = |key: u16, down: bool| -> bool {
+            let ev = CGEventCreateKeyboardEvent(source, key, down);
+            if ev.is_null() {
+                return false;
+            }
+            CGEventSetFlags(ev, CG_EVENT_FLAG_COMMAND);
+            CGEventPost(CG_HID_EVENT_TAP, ev);
+            CFRelease(ev);
+            true
+        };
+
+        ok &= chord_key(VK_COMMAND, true);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        ok &= chord_key(VK_V, true);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        ok &= chord_key(VK_V, false);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        ok &= chord_key(VK_COMMAND, false);
+
+        if !source.is_null() {
+            CFRelease(source);
+        }
+        ok
     }
 }
 

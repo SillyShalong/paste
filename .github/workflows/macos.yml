@@ -73,6 +73,12 @@ jobs:
       - run: npm ci
       - name: Build macOS app (aarch64)
         run: npx tauri build --target aarch64-apple-darwin --bundles app,dmg
+      # Re-sign with a requirement keyed to the bundle identifier: Tauri's
+      # ad-hoc signature binds the TCC accessibility grant to the exact
+      # binary cdhash, so an updated download would silently lose the
+      # "Privacy & Security → Accessibility" approval pasting needs.
+      - name: Stable-sign the app bundle
+        run: ./scripts/codesign-stable.sh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Paste.app
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

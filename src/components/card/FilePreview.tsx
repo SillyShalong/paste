@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
 import type { Clip } from "../../types";
 
 const EXT_COLORS: Record<string, string> = {
@@ -14,19 +16,84 @@ const EXT_COLORS: Record<string, string> = {
   html: "#f97316", css: "#0ea5e9", rs: "#f97316", py: "#3b82f6",
 };
 
+/// Extensions the panel <img> can render (same whitelist as the backend
+/// read_file_image command).
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp"]);
+
+export function isImagePath(p: string): boolean {
+  const name = p.split(/[\\/]/).pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return IMAGE_EXTS.has(name.slice(dot + 1).toLowerCase());
+}
+
+export function parseClipPaths(clip: Clip): string[] {
+  try {
+    return clip.files ? JSON.parse(clip.files) : [];
+  } catch {
+    return [];
+  }
+}
+
+// One IPC read per path per session — cards and the detail preview share it.
+const imageDataCache = new Map<string, Promise<string | null>>();
+
+function loadImageData(path: string): Promise<string | null> {
+  let p = imageDataCache.get(path);
+  if (!p) {
+    // Normalize failures (missing file, IPC unavailable in a plain browser)
+    // to null so the fallback rendering kicks in.
+    p = api.readFileImage(path).catch(() => null);
+    imageDataCache.set(path, p);
+  }
+  return p;
+}
+
+/// Resolves to the file's data URL, or null while loading / when the file
+/// can't be shown (missing, too large, unreadable) — callers fall back to
+/// the plain path rendering.
+export function useImageData(path: string): string | null {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadImageData(path).then((d) => {
+      if (alive && d) setDataUrl(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  return dataUrl;
+}
+
 function fileName(p: string) {
   return p.split(/[\\/]/).pop() ?? p;
 }
 
 export function FilePreview({ clip }: { clip: Clip }) {
-  let paths: string[] = [];
-  try {
-    paths = clip.files ? JSON.parse(clip.files) : [];
-  } catch {
-    /* ignore */
-  }
+  const paths = parseClipPaths(clip);
   if (paths.length === 0) return <div className="preview plain">Empty file selection</div>;
 
+  // Image files render the picture itself; anything unreadable (missing
+  // file, oversized) or a non-image selection keeps the file-type list.
+  if (paths.every(isImagePath)) {
+    return <FileImagePreview paths={paths} fallback={<FileList paths={paths} />} />;
+  }
+  return <FileList paths={paths} />;
+}
+
+function FileImagePreview({ paths, fallback }: { paths: string[]; fallback: React.ReactNode }) {
+  const dataUrl = useImageData(paths[0]);
+  if (!dataUrl) return <>{fallback}</>;
+  return (
+    <div className="preview file-image">
+      <img src={dataUrl} alt={fileName(paths[0])} draggable={false} />
+      {paths.length > 1 && <span className="file-image-more">×{paths.length}</span>}
+    </div>
+  );
+}
+
+function FileList({ paths }: { paths: string[] }) {
   return (
     <div className="preview files">
       {paths.slice(0, 4).map((p) => {

@@ -48,6 +48,35 @@ pub fn list_tray_icons() -> Vec<TrayIconOption> {
         .collect()
 }
 
+/// Read an image file (a file clip pointing at an image) and return it as a
+/// data URL so cards and the detail preview can show the picture itself
+/// instead of the file path. Guarded by an extension whitelist and a size
+/// cap: the webview can only pull renderable, bounded image bytes, and the
+/// asset protocol scope stays limited to app data.
+#[tauri::command]
+pub fn read_file_image(path: String) -> Option<String> {
+    use base64::Engine as _;
+
+    // Formats the WKWebView / WebView2 <img> can actually render.
+    const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp"];
+    const MAX_BYTES: u64 = 20 * 1024 * 1024;
+
+    let ext = std::path::Path::new(&path)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    if !IMAGE_EXTS.contains(&ext.as_str()) {
+        return None;
+    }
+    let meta = std::fs::metadata(&path).ok()?;
+    if !meta.is_file() || meta.len() > MAX_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(&path).ok()?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:image/{ext};base64,{encoded}"))
+}
+
 #[tauri::command]
 pub fn get_initial(app: AppHandle) -> InitialData {
     let state = app.state::<AppState>();
@@ -283,5 +312,41 @@ pub fn paste_permission_granted() -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 1x1 red PNG (valid image bytes for the whitelist check).
+    const PNG_1PX: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+        0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+        0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB0, 0x00, 0x00, 0x00,
+        0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    #[test]
+    fn read_file_image_whitelist_and_content() {
+        let dir = std::env::temp_dir().join("paste-read-file-image-test");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let png = dir.join("shot.PNG"); // extension match is case-insensitive
+        std::fs::write(&png, PNG_1PX).unwrap();
+        let data = read_file_image(png.to_string_lossy().into_owned());
+        let data = data.expect("png must load");
+        assert!(data.starts_with("data:image/png;base64,"));
+
+        let txt = dir.join("notes.txt");
+        std::fs::write(&txt, b"not an image").unwrap();
+        assert_eq!(read_file_image(txt.to_string_lossy().into_owned()), None);
+
+        let missing = dir.join("gone.png");
+        assert_eq!(read_file_image(missing.to_string_lossy().into_owned()), None);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

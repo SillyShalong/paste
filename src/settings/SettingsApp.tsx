@@ -180,7 +180,7 @@ export default function SettingsApp() {
         </Row>
         <Row
           label={t("Quick paste shortcuts")}
-          desc={t("Ctrl+1…9 paste the most recent clips without opening the panel")}
+          desc={t(`${modLabel}+1…9 paste the most recent clips without opening the panel`)}
         >
           <Toggle on={settings.quickPaste} onChange={(v) => update({ quickPaste: v })} />
         </Row>
@@ -230,7 +230,11 @@ export default function SettingsApp() {
         <div className="setting-row" style={{ paddingBottom: 0 }}>
           <div className="setting-label">
             {t("Copies made inside these apps are never recorded")}
-            <span className="desc">{t("Use the executable file name, e.g. 1password.exe")}</span>
+            <span className="desc">
+              {isMac
+                ? t("Use the app's executable name, e.g. 1password")
+                : t("Use the executable file name, e.g. 1password.exe")}
+            </span>
           </div>
         </div>
         <div className="excluded-list">
@@ -252,7 +256,7 @@ export default function SettingsApp() {
         <div className="settings-actions">
           <input
             type="text"
-            placeholder="app.exe"
+            placeholder={isMac ? "1password" : "app.exe"}
             value={newExe}
             onChange={(e) => setNewExe(e.target.value)}
             onKeyDown={(e) => {

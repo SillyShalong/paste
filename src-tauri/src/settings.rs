@@ -81,6 +81,8 @@ impl Default for AppSettings {
 }
 
 /// Password managers etc. that should never be captured by default.
+/// Both Windows exe names and macOS binary names are listed — the listener
+/// matches against the lowercased executable file name on either platform.
 fn default_excluded_apps() -> Vec<String> {
     vec![
         "1password.exe",
@@ -92,6 +94,14 @@ fn default_excluded_apps() -> Vec<String> {
         "enpass.exe",
         "protonpass.exe",
         "robat.exe",
+        // macOS bundle executables (no extension).
+        "1password",
+        "bitwarden",
+        "keepassxc",
+        "dashlane",
+        "lastpass",
+        "enpass",
+        "protonpass",
     ]
     .into_iter()
     .map(str::to_string)

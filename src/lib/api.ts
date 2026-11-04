@@ -50,6 +50,10 @@ export const api = {
 
   listTrayIcons: () => invoke<{ id: string; pngBase64: string }[]>("list_tray_icons"),
 
+  /// Data URL for an image file clip (extension/size checked backend-side),
+  /// or null when the path is unreadable or not a renderable image.
+  readFileImage: (path: string) => invoke<string | null>("read_file_image", { path }),
+
   togglePause: () => invoke<boolean>("toggle_pause"),
   hidePanel: () => invoke<void>("hide_panel"),
   openSettings: () => invoke<void>("open_settings"),

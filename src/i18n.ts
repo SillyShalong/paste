@@ -18,6 +18,7 @@ const zh: Record<string, string> = {
   Clear: "清空",
   Cancel: "取消",
   "Toggle sidebar (Ctrl+B)": "切换侧栏 (Ctrl+B)",
+  "Toggle sidebar (Cmd+B)": "切换侧栏 (Cmd+B)",
   "Pause history": "暂停记录",
   "Resume history": "恢复记录",
   Settings: "设置",
@@ -29,6 +30,8 @@ const zh: Record<string, string> = {
   "No matches found": "没有匹配的结果",
   "Copy something anywhere in Windows and it will show up here instantly.":
     "在 Windows 任意位置复制内容，它会立刻出现在这里。",
+  "Copy something anywhere in macOS and it will show up here instantly.":
+    "在 macOS 任意位置复制内容，它会立刻出现在这里。",
 
   // Panel — sidebar
   Pinboards: "收藏板",
@@ -46,6 +49,7 @@ const zh: Record<string, string> = {
   "Paste as Plain Text": "以纯文本粘贴",
   "Paste (Enter)": "粘贴 (Enter)",
   "Paste as plain text (Ctrl+Enter)": "以纯文本粘贴 (Ctrl+Enter)",
+  "Paste as plain text (Cmd+Enter)": "以纯文本粘贴 (Cmd+Enter)",
   "Delete (Del)": "删除 (Del)",
   "Pin to": "置顶到",
   "Copy Again": "再次复制",
@@ -114,6 +118,8 @@ const zh: Record<string, string> = {
   "Quick paste shortcuts": "快速粘贴快捷键",
   "Ctrl+1…9 paste the most recent clips without opening the panel":
     "Ctrl+1…9 直接粘贴最近的剪贴内容，无需打开面板",
+  "Cmd+1…9 paste the most recent clips without opening the panel":
+    "Cmd+1…9 直接粘贴最近的剪贴内容，无需打开面板",
 
   // Settings — history
   "Keep at most": "最多保留",
@@ -130,6 +136,7 @@ const zh: Record<string, string> = {
   "Excluded Apps": "排除的应用",
   "Copies made inside these apps are never recorded": "在这些应用中的复制行为不会被记录",
   "Use the executable file name, e.g. 1password.exe": "填写可执行文件名，例如 1password.exe",
+  "Use the app's executable name, e.g. 1password": "填写应用的可执行文件名，例如 1password",
   Add: "添加",
 
   // Settings — pinboards

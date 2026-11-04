@@ -42,6 +42,51 @@ fn acquire_single_instance_lock() -> bool {
     }
 }
 
+/// Single instance for macOS: flock(2) on a lock file in the app's support
+/// directory. A second concurrent instance would run a second clipboard
+/// listener — two captures fighting over the store, double paste synthesis.
+/// The fd is never closed on purpose: holding it open holds the lock, and
+/// the OS releases both when the process exits.
+#[cfg(target_os = "macos")]
+fn acquire_single_instance_lock() -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    extern "C" {
+        fn open(path: *const std::ffi::c_char, flags: i32, ...) -> i32;
+        fn flock(fd: i32, operation: i32) -> i32;
+        fn close(fd: i32) -> i32;
+    }
+    const O_RDWR: i32 = 0x0002;
+    const O_CREAT: i32 = 0x0200;
+    const LOCK_EX: i32 = 2;
+    const LOCK_NB: i32 = 4;
+
+    let Some(home) = std::env::var_os("HOME") else {
+        return true; // nowhere to put the lock — don't block startup
+    };
+    let dir = std::path::PathBuf::from(home)
+        .join("Library/Application Support/com.pasteclone.app");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return true;
+    }
+    let path = dir.join("single-instance.lock");
+    let Ok(cpath) = CString::new(path.as_os_str().as_bytes()) else {
+        return true;
+    };
+    unsafe {
+        let fd = open(cpath.as_ptr(), O_CREAT | O_RDWR, 0o644);
+        if fd < 0 {
+            return true; // can't even open the lock file — don't block startup
+        }
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd);
+            return false;
+        }
+        true // fd deliberately left open: keeping it holds the lock
+    }
+}
+
 /// Selectable tray icon variants (embedded at compile time).
 const TRAY_ICON_SETS: &[(&str, &[u8])] = &[
     ("classic", include_bytes!("../icons/tray/classic.png")),
@@ -110,11 +155,11 @@ pub fn apply_tray_icon(app: &AppHandle, name: &str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Single instance: a second concurrent launch would fight over the
-    // WebView2 user-data folder and abort with 0x800700AA ("resource in
-    // use") at startup — and each crash leaves zombie browser processes
-    // that keep the folder locked for every later launch.
-    #[cfg(windows)]
+    // Single instance: on Windows a second concurrent launch would fight
+    // over the WebView2 user-data folder and abort with 0x800700AA
+    // ("resource in use") at startup; on macOS it would run a second
+    // clipboard listener against the same store. Either way: exit early.
+    #[cfg(any(windows, target_os = "macos"))]
     if !acquire_single_instance_lock() {
         eprintln!("[paste] another instance is already running; exiting");
         return;
@@ -142,6 +187,12 @@ pub fn run() {
             // dispatch for AppKit work).
             let _ = state::APP_HANDLE.set(app.handle().clone());
 
+            #[cfg(target_os = "macos")]
+            eprintln!(
+                "[paste] startup: accessibility_trusted={}",
+                crate::macos::ax_trusted()
+            );
+
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
 
@@ -151,53 +202,20 @@ pub fn run() {
             // failure — 0x800700AA right after a runtime update — can be
             // retried; if the machine stays busy the app keeps running with
             // tray + history capture and the panel can be created lazily.
-            let panel = {
-                let mut built = None;
-                for attempt in 1..=5 {
-                    match tauri::WebviewWindowBuilder::new(
-                        app,
-                        "panel",
-                        tauri::WebviewUrl::App("index.html".into()),
-                    )
-                    .title("Paste")
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .visible(false)
-                    .skip_taskbar(true)
-                    .resizable(false)
-                    .shadow(false)
-                    .build()
-                    {
-                        Ok(w) => {
-                            built = Some(w);
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "[paste] panel create attempt {}/5 failed: {}",
-                                attempt, e
-                            );
-                            std::thread::sleep(std::time::Duration::from_secs(4));
-                        }
-                    }
-                }
-                match built {
-                    Some(w) => w,
-                    None => {
-                        eprintln!(
-                            "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry"
-                        );
-                        return Ok(());
-                    }
-                }
-            };
+            // Same helper as the tray retry path so the autohide behavior is
+            // registered no matter which path built the window.
+            if let Err(e) = create_panel(app.handle()) {
+                eprintln!(
+                    "[paste] panel unavailable (machine WebView2 busy); tray and history keep running - use the tray icon to retry: {e}"
+                );
+            }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_initial,
             commands::list_tray_icons,
+            commands::read_file_image,
             commands::list_clips,
             commands::paste_clip,
             commands::delete_clip,
@@ -322,10 +340,47 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
     });
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn spawn_panel_foreground_watcher(_app: &AppHandle, _panel: &tauri::WebviewWindow) {}
 
-#[cfg(not(windows))]
+/// macOS watchdog: same guarantee as the Windows foreground watcher — when
+/// the frontmost app is no longer ours, the panel hides, even if the blur
+/// event never fired (clicks that take activation away without delivering a
+/// usable focus hand-off to a borderless panel). NSWorkspace needs the main
+/// thread; each poll is a cheap PID read via `frontmost_process_id`.
+#[cfg(target_os = "macos")]
+fn spawn_panel_foreground_watcher(app: &AppHandle, _panel: &tauri::WebviewWindow) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Grace period while the focus hand-off settles.
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let mine = std::process::id() as isize;
+        loop {
+            let Some(panel) = app.get_webview_window("panel") else { return };
+            if !panel.is_visible().unwrap_or(false) {
+                return;
+            }
+            let front = crate::state::on_main_sync(crate::macos::frontmost_process_id).flatten();
+            if let Some(front) = front {
+                if front != mine {
+                    eprintln!("[paste] watchdog: frontmost pid {front} != {mine}; hiding panel");
+                    let _ = panel.hide();
+                    return;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+    });
+}
+
+/// Windows forces focus through the input-queue attach so the blur watchdog
+/// has something to work with; on macOS making the panel key is enough.
+#[cfg(target_os = "macos")]
+fn force_focus_panel(panel: &tauri::WebviewWindow) {
+    let _ = panel.set_focus();
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn force_focus_panel(_panel: &tauri::WebviewWindow) {}
 
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
@@ -473,6 +528,9 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
     // monitor is where the user is working, so that's where the panel goes.
     paste::capture_foreground(app);
     let prev = *state.prev_hwnd.lock().unwrap();
+    // macOS placement keys off the cursor monitor instead of prev's window.
+    #[cfg(not(windows))]
+    let _ = prev;
 
     #[cfg(windows)]
     if let Some((mx, my, mw, mh)) = monitor_area_for(prev) {
@@ -490,7 +548,28 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
         let _ = panel.set_size(tauri::PhysicalSize::new(mw as u32, target_h as u32));
         let _ = panel.set_position(tauri::PhysicalPosition::new(mx, y));
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // Land on the screen the user is working on: the monitor containing
+        // the cursor when we can get it, else the primary monitor.
+        let monitor = monitor_with_cursor(panel)
+            .or_else(|| panel.primary_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let scale = monitor.scale_factor();
+            let size = monitor.size();
+            let pos = monitor.position();
+            let target_h = (PANEL_HEIGHT * scale).round() as i32;
+            let margin = (12.0 * scale).round() as i32;
+            let y = match pos_pref.as_str() {
+                "top" => pos.y + margin,
+                "bottom" => pos.y + size.height as i32 - target_h - margin,
+                _ => pos.y + (size.height as i32 - target_h) / 2,
+            };
+            let _ = panel.set_size(tauri::PhysicalSize::new(size.width, target_h as u32));
+            let _ = panel.set_position(tauri::PhysicalPosition::new(pos.x, y));
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     if let Ok(Some(monitor)) = panel.primary_monitor() {
         let scale = monitor.scale_factor();
         let size = monitor.size();
@@ -544,6 +623,21 @@ fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
 #[cfg(not(windows))]
 fn monitor_area_for(_prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
     None
+}
+
+/// The monitor currently containing the mouse cursor (macOS helper for
+/// panel placement — the closest cross-platform stand-in for "the screen
+/// the user is working on").
+#[cfg(target_os = "macos")]
+fn monitor_with_cursor(panel: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    let cursor = panel.cursor_position().ok()?;
+    panel.available_monitors().ok()?.into_iter().find(|m| {
+        let p = m.position();
+        let s = m.size();
+        let (x, y) = (p.x as f64, p.y as f64);
+        let (w, h) = (s.width as f64, s.height as f64);
+        cursor.x >= x && cursor.x < x + w && cursor.y >= y && cursor.y < y + h
+    })
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

@@ -31,7 +31,7 @@ export default function SearchBar() {
   return (
     <div className="search-area">
       <div className="search-row">
-        <button className="icon-btn" title={t("Toggle sidebar (Ctrl+B)")} onClick={() => useStore.getState().toggleSidebar()}>
+        <button className="icon-btn" title={t(`Toggle sidebar (${modLabel}+B)`)} onClick={() => useStore.getState().toggleSidebar()}>
           <SidebarIcon />
         </button>
         <input

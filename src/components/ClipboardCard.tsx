@@ -4,6 +4,7 @@ import { useT } from "../i18n";
 import { useStore } from "../store/useStore";
 import type { Clip } from "../types";
 import { api, convertFileSrc } from "../lib/api";
+import { modLabel } from "../lib/platform";
 import { TextPreview } from "./card/TextPreview";
 import { LinkPreview } from "./card/LinkPreview";
 import { ImagePreview } from "./card/ImagePreview";
@@ -59,7 +60,7 @@ export default function ClipboardCard({
           <button title={t("Paste (Enter)")} onClick={(e) => { e.stopPropagation(); useStore.getState().paste(); }}>
             {t("Paste")}
           </button>
-          <button title={t("Paste as plain text (Ctrl+Enter)")} onClick={(e) => { e.stopPropagation(); useStore.getState().paste(true); }}>
+          <button title={t(`Paste as plain text (${modLabel}+Enter)`)} onClick={(e) => { e.stopPropagation(); useStore.getState().paste(true); }}>
             {t("Plain")}
           </button>
           <button title={t("Delete (Del)")} className="danger" onClick={(e) => { e.stopPropagation(); useStore.getState().deleteClip(); }}>

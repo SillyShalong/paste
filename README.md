@@ -1,5 +1,7 @@
 <div align="center">
 
+English | [简体中文](README.zh-CN.md)
+
 <img src="docs/logo.png" width="88" alt="Paste" />
 
 # Paste

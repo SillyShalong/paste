@@ -82,8 +82,6 @@ Paste **保留你复制过的一切**：一条横贯屏幕的可视化卡片带 
 
 ### 全文预览
 
-<div align="center"><img src="docs/screenshot-detail.png" width="100%" alt="Space 预览" /></div>
-
 内容太长放不进卡片？选中后按 <kbd>Space</kbd> —— 会打开一个可滚动的全文
 预览：完整文本、原始尺寸图片、图片文件背后的图片，或完整文件路径。预览打开时
 可用 `←`/`→` 浏览卡片，预览内容保持同步。

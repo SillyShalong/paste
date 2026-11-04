@@ -91,8 +91,6 @@ Settings.
 
 ### Full-content preview
 
-<div align="center"><img src="docs/screenshot-detail.png" width="100%" alt="Space preview" /></div>
-
 Content too long for a card? Select it and press <kbd>Space</kbd> — a scrollable
 full-content preview opens with the complete text, natural-size image, the
 picture behind an image file, or full file paths. Browse cards with `←`/`→`

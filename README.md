@@ -1,19 +1,19 @@
 <div align="center">
 
-<img src="docs/logo.png" width="88" alt="Paste for Windows" />
+<img src="docs/logo.png" width="88" alt="Paste" />
 
-# Paste for Windows
+# Paste
 
 **A beautiful, keyboard-first clipboard manager — bringing the beloved
-[Paste for macOS](https://pasteapp.io) experience to Windows.**
+[Paste for macOS](https://pasteapp.io) experience to Windows & macOS.**
 
 [![Release](https://img.shields.io/github/v/release/SillyShalong/paste?include_prereleases&color=4f46e5)](https://github.com/SillyShalong/paste/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/SillyShalong/paste/build-release.yml?label=build)](https://github.com/SillyShalong/paste/actions/workflows/build-release.yml)
 [![Downloads](https://img.shields.io/github/downloads/SillyShalong/paste/total?color=10b981)](https://github.com/SillyShalong/paste/releases)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4)
-![Built with](https://img.shields.io/badge/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20macOS%2011%2B%20Apple%20Silicon-blue)
+![Built with](https://img.shields.io/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
 
-<img src="docs/screenshot-panel.png" width="100%" alt="Paste for Windows main panel" />
+<img src="docs/screenshot-panel.png" width="100%" alt="Paste main panel" />
 
 *Everything you've ever copied — text, code, links, images, files, colors —
 in one searchable strip, one keystroke away.*
@@ -22,29 +22,33 @@ in one searchable strip, one keystroke away.*
 
 ---
 
-## Why Paste for Windows?
+## Why Paste?
 
-Windows already gives you `Win+V`… and then forgets everything the moment you
-reboot, buries your history in a tiny menu, and gives you zero organization.
+Your OS clipboard gives you `Win+V` / "recent items"… and then forgets
+everything the moment you reboot, buries your history in a tiny menu, and
+gives you zero organization.
 
-Paste for Windows keeps **everything you copy, forever**, in a visual card
-strip that spans your screen — each card tagged with the app it came from —
-and lets you paste anything back with a single keystroke, in any app,
-in the order you choose.
+Paste keeps **everything you copy**, in a visual card strip that spans your
+screen — each card tagged with the app it came from — and lets you paste
+anything back with a single keystroke, in any app, in the order you choose.
 
 - 🎨 **Visual history** — every clip rendered as a rich card: syntax-highlighted
-  code, link previews, image thumbnails, file lists, color swatches
+  code, link previews, image thumbnails, file lists (image files render the
+  picture itself), color swatches
 - 🖥️ **Multi-monitor native** — the panel appears on the screen you're working on,
   positioned top / center / bottom, your choice
 - ⌨️ **Keyboard-first** — navigate, preview, and paste without touching the mouse
+- 🌏 **English / 简体中文** — UI language follows the system or is fixed in Settings
 - 📌 **Pinboards** — keep frequently used snippets permanently, organized into boards
 - 🔍 **Power search** — full-text search across everything, plus per-type filters
 - 🛡️ **Private by design** — data never leaves your machine; password managers are
-  excluded from capture by default
-- 🪶 **Lightweight** — a native Rust backend, ~2.4 MB installer, instant hotkey
-  response
+  excluded from capture by default; single-instance guard on both platforms
+- 🪶 **Lightweight** — a native Rust backend, ~2.5 MB Windows installer, instant
+  hotkey response
 
 ## 📥 Download
+
+### Windows
 
 Two flavors on the [Releases](https://github.com/SillyShalong/paste/releases) page:
 
@@ -57,6 +61,16 @@ Two flavors on the [Releases](https://github.com/SillyShalong/paste/releases) pa
 > **Requirements:** Windows 10 (1809+) or Windows 11. The WebView2 runtime is
 > already part of Windows 11 and auto-installed on Windows 10.
 
+### macOS (Apple Silicon)
+
+Build from source on an M-series Mac (see [Development](#️-development)), or
+grab the `Paste-macos-aarch64` artifact / `.dmg` from CI or a release tag.
+
+> **Requirements:** macOS 11+ on Apple Silicon. Pasting into other apps needs
+> the **Accessibility** permission (System Settings → Privacy & Security →
+> Accessibility → add Paste); the app shows a banner in Settings until it's
+> granted, and the grant survives updates thanks to identifier-based signing.
+
 ## ✨ Features
 
 ### Unlimited, visual clipboard history
@@ -64,12 +78,13 @@ Two flavors on the [Releases](https://github.com/SillyShalong/paste/releases) pa
 Everything you copy lands in a horizontal card strip — the newest on the left.
 Each card is stamped with the **source app's icon and brand color**, so you can
 see at a glance where a clip came from. Supported content: plain & rich text,
-URLs, images, file lists, and hex colors.
+URLs, images, file lists, and hex colors. Copy an image *file* and the card
+shows the picture itself, not its path.
 
 ### Multi-monitor & positional control
 
-The panel follows you: it opens on the monitor of the window you were working
-in, and snaps to the top, center, or bottom of that screen — configurable in
+The panel follows you: it opens on the screen you were working in, and snaps
+to the top, center, or bottom (the default) of that screen — configurable in
 Settings.
 
 ### Full-content preview
@@ -77,8 +92,15 @@ Settings.
 <div align="center"><img src="docs/screenshot-detail.png" width="100%" alt="Space preview" /></div>
 
 Content too long for a card? Select it and press <kbd>Space</kbd> — a scrollable
-full-content preview opens with the complete text, natural-size image, or full
-file paths. Browse cards with `←`/`→` while the preview stays in sync.
+full-content preview opens with the complete text, natural-size image, the
+picture behind an image file, or full file paths. Browse cards with `←`/`→`
+while the preview stays in sync.
+
+### Frosted-glass panel
+
+The panel floats over your desktop as a translucent strip — native window
+vibrancy on macOS (NSVisualEffectView, crisp from the first frame), CSS
+backdrop blur on Windows.
 
 ### Pinboards
 
@@ -106,59 +128,125 @@ Applied instantly, no restart needed.
 
 - Everything is stored **locally** in SQLite — no cloud, no telemetry
 - Per-app **exclusion list** (password managers like 1Password, Bitwarden,
-  KeePass are skipped by default)
+  KeePass are skipped by default — Windows and macOS binary names both)
 - One-click **pause** from the tray while screen-sharing
 - Optional history size limit; pinned items survive clears
+- Single-instance guard: launching a second copy exits immediately
 
 ## ⌨️ Keyboard shortcuts
 
+`Ctrl` on Windows, `Cmd` on macOS — same keys, same actions.
+
 | Key | Action |
 |-----|--------|
-| `Ctrl+Shift+V` | Show / hide the panel *(remappable in settings)* |
+| `Ctrl/Cmd+Shift+V` | Show / hide the panel *(remappable in settings)* |
 | `←` / `→` | Navigate cards |
 | `Space` | Full-content preview of the selected card |
 | `Enter` | Paste the selected clip |
-| `Ctrl+Enter` | Paste as plain text |
-| `Ctrl+1` … `Ctrl+9` | Quick-paste the most recent clips — no panel needed |
-| `Ctrl+P` | Pin / unpin the selected clip |
+| `Ctrl/Cmd+Enter` | Paste as plain text |
+| `Ctrl/Cmd+1` … `Ctrl/Cmd+9` | Quick-paste the most recent clips — no panel needed |
+| `Ctrl/Cmd+P` | Pin / unpin the selected clip |
 | `Del` | Delete the selected clip |
 | `Tab` | Cycle type filters |
-| `Ctrl+B` | Toggle the sidebar |
-| `Esc` | Close |
+| `Ctrl/Cmd+B` | Toggle the sidebar |
+| `Esc` / click outside | Close |
 
 Mouse users: hover a card for actions, **double-click** for the full-content
-preview, **scroll wheel** scrolls the strip horizontally.
+preview, **scroll wheel** scrolls the strip horizontally (direction
+configurable).
+
+## 🍎 macOS implementation notes
+
+Per-platform pieces:
+
+```
+src-tauri/src/
+  macos.rs               hand-rolled msg_send bindings: NSPasteboard read/write,
+                         NSWorkspace frontmost app + icon, NSRunningApplication
+                         activation, CGEvent Cmd+V synthesis (events carry the
+                         Command flag — bare keycodes don't), AX permission check
+  clipboard/listener.rs  Windows: message-only window (event-driven);
+                         macOS: NSPasteboard.changeCount polling (thread-safe)
+  clipboard/capture.rs   Windows: CF_* flavors; macOS: UTI flavors via NSPasteboard
+  clipboard/set.rs       writes any clip kind back (Win32 / NSPasteboard)
+  appinfo.rs             foreground app → icon → brand color (Win32 / NSWorkspace)
+  paste.rs               focus restore (AttachThreadInput / activateWithOptions:)
+                         + keystroke synthesis (SendInput Ctrl+V / CGEvent Cmd+V)
+```
+
+Design notes:
+
+- **No private clipboard APIs.** Capture polls `NSPasteboard.changeCount`
+  (150 ms) on a dedicated thread; `NSPasteboard` is documented thread-safe.
+  (`macOSPrivateApi` is enabled for window/webview transparency only.)
+- **Main-thread discipline.** `NSWorkspace`/`NSImage` calls are dispatched to
+  the main thread via `state::on_main_sync` (inline-safe when already there).
+- **Accessibility permission** gates the synthesized Cmd+V. The app logs
+  `accessibility_trusted` at startup and shows a Settings banner until granted.
+- **Stable signing.** Builds are re-signed with a requirement keyed to the
+  bundle identifier (`scripts/codesign-stable.sh`), so the accessibility grant
+  survives rebuilds and updates — ad-hoc signing alone would invalidate it.
+- **Single instance** via `flock(2)` on a lock file in the app support dir.
+- Hotkeys follow platform convention: the default hotkey maps to
+  `Cmd+Shift+V`; quick paste registers `Cmd+1…9` instead of `Ctrl+1…9`.
+- The frontend is shared; labels switch `Ctrl`/`Cmd` via `src/lib/platform.ts`.
+
+## 🛠️ Development
+
+**Windows** — prerequisites: Node.js LTS, Rust (stable-msvc), VS 2022 Build
+Tools (C++):
+
+```powershell
+git clone https://github.com/SillyShalong/paste.git
+cd paste
+npm install
+npm run tauri dev      # run with hot reload
+npm run tauri build    # NSIS installer + portable zip
+```
+
+**macOS (Apple Silicon)** — prerequisites: Node.js LTS, Rust via rustup:
+
+```bash
+git clone https://github.com/SillyShalong/paste.git
+cd paste
+npm install
+npm run tauri dev                                  # run with hot reload
+npm run tauri build -- --target aarch64-apple-darwin --bundles app
+./scripts/codesign-stable.sh                       # keep the accessibility grant stable
+# → Paste.app in src-tauri/target/aarch64-apple-darwin/release/bundle/macos/
+```
+
+Regenerate the app + tray icons from their SVG sources after a design change:
+
+```bash
+node scripts/gen-icons.mjs                           # writes app-icon.png + tray set
+npx tauri icon src-tauri/icons/app-icon.png          # platform icon set (icns/ico/pngs)
+```
+
+Stack: **Tauri 2** (Rust backend) + **React 18 / TypeScript** frontend + SQLite.
+The Windows clipboard pipeline is event-driven (no polling); macOS polls
+`NSPasteboard.changeCount`. Paste restores focus to the previous app
+(`AttachThreadInput` / `activateWithOptions:`), and all data lives in
+`%APPDATA%\com.pasteclone.app` (Windows) or
+`~/Library/Application Support/com.pasteclone.app` (macOS).
+
+See [`docs/`](docs/) for architecture notes, `src-tauri/examples/dbquery.rs`
+for a database inspection tool, and `src-tauri/examples/frontmost.rs` for a
+standalone probe of the macOS AppKit bindings.
 
 ## 🗺️ Roadmap
 
 - [x] Multi-monitor panel placement
 - [x] Space full-content preview
 - [x] Tray icon themes
-- [ ] **macOS port (Apple Silicon)** — in active development on `dev`
+- [x] **macOS port (Apple Silicon)** — shipped on `main`
+- [x] Settings localization (English / 简体中文)
 - [ ] Paste Stack (queue multiple clips, paste in order)
 - [ ] OCR search inside images
-- [ ] Settings localization (中文 / 日本語)
-
-## 🛠️ Development
-
-```powershell
-# prerequisites: Node.js LTS, Rust (stable-msvc), VS 2022 Build Tools (C++)
-git clone https://github.com/SillyShalong/paste.git
-cd paste
-npm install
-npm run tauri dev      # run with hot reload
-npm run tauri build    # produce the NSIS installer
-```
-
-Stack: **Tauri 2** (Rust backend) + **React 18 / TypeScript** frontend + SQLite.
-The clipboard pipeline is event-driven (no polling), paste restores focus via
-`AttachThreadInput`, and all data lives in `%APPDATA%\com.pasteclone.app`.
-
-See [`docs/`](docs/) for architecture notes and `src-tauri/examples/dbquery.rs`
-for a small database inspection tool.
+- [ ] 日本語 localization
 
 ## 🙏 Acknowledgements
 
-Designed with love as a Windows tribute to
+Designed with love as a tribute to
 [Paste for macOS](https://pasteapp.io) — the clipboard manager that set the bar.
-If you're on a Mac, buy their subscription; if you're on Windows, welcome home. 💜
+If you're on a Mac, buy their subscription; otherwise, welcome home. 💜

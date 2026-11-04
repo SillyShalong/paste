@@ -144,13 +144,10 @@ const zh: Record<string, string> = {
 
   "Start Paste automatically when you log in": "登录时自动启动 Paste",
   "Press keys… (include a modifier)": "请按下快捷键…（需包含修饰键）",
-  "Inspired by Paste for macOS.": "灵感来自 Paste for macOS。",
 
   // Settings — about
   About: "关于",
   "Create pinboards from the panel sidebar.": "在面板侧栏创建收藏板。",
-  "Paste for Windows — a desktop clipboard manager inspired by Paste for macOS.":
-    "Paste for Windows —— 受 Paste for macOS 启发的桌面剪贴板管理器。",
   "Data stays on this machine.": "数据仅保存在本机。",
   Build: "构建类型",
   "Compiler profile this binary was built with": "此二进制文件的编译配置",

@@ -327,7 +327,7 @@ export default function SettingsApp() {
         <div className="about-head">
           <img src="/app-icon.png" alt="Paste" className="about-icon" />
           <div>
-            <div className="about-name">Paste for Windows</div>
+            <div className="about-name">Paste</div>
             <div className="about-version">Version {version}</div>
           </div>
         </div>

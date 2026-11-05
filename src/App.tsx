@@ -92,7 +92,7 @@ export default function App() {
           if (clip) useStore.setState({ detailClipId: clip.id });
           else s.closeDetail();
         }
-        scrollToCard(sel);
+        scrollToCard(sel, e.repeat);
         return;
       }
       if (e.key === "Enter") {
@@ -144,9 +144,11 @@ function scrollDetail(key: string) {
   }
 }
 
-export function scrollToCard(index: number) {
+export function scrollToCard(index: number, repeating = false) {
   requestAnimationFrame(() => {
     const el = document.querySelector<HTMLElement>(`[data-card-index="${index}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    // Repeated key presses arrive faster than a smooth scroll can finish;
+    // restarting that animation on every press makes the selection lag.
+    el?.scrollIntoView({ behavior: repeating ? "instant" : "smooth", block: "nearest", inline: "nearest" });
   });
 }

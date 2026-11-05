@@ -34,6 +34,9 @@ pub struct AppState {
     pub paused: AtomicBool,
     /// Foreground window (raw HWND as isize) that had focus before the panel opened.
     pub prev_hwnd: Mutex<Option<isize>>,
+    /// Focused Windows child control captured before opening the panel.
+    #[cfg(windows)]
+    pub prev_focus_hwnd: Mutex<Option<isize>>,
     /// Set while we ourselves write to the clipboard (pasting an old item),
     /// so the listener doesn't re-capture what we just set.
     pub skip_capture: AtomicBool,
@@ -58,6 +61,8 @@ impl AppState {
             settings: Mutex::new(settings),
             db: Mutex::new(db),
             prev_hwnd: Mutex::new(None),
+            #[cfg(windows)]
+            prev_focus_hwnd: Mutex::new(None),
             skip_capture: AtomicBool::new(false),
             panel_generation: AtomicU64::new(0),
             data_dir,

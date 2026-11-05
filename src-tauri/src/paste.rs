@@ -16,6 +16,10 @@ pub fn capture_foreground(app: &AppHandle) {
     let hwnd = foreground_window();
     let state = app.state::<AppState>();
     *state.prev_hwnd.lock().unwrap() = hwnd;
+    #[cfg(windows)]
+    {
+        *state.prev_focus_hwnd.lock().unwrap() = hwnd.and_then(focused_child_window);
+    }
 }
 
 /// Paste a clip into the app that had focus before the panel opened.
@@ -61,6 +65,9 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
 
     #[cfg(any(windows, target_os = "macos"))]
     if restore {
+        #[cfg(windows)]
+        restore_foreground(target.unwrap(), *state.prev_focus_hwnd.lock().unwrap());
+        #[cfg(target_os = "macos")]
         restore_foreground(target.unwrap());
     }
 
@@ -76,6 +83,11 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
     #[cfg(not(target_os = "macos"))]
     std::thread::sleep(Duration::from_millis(60));
 
+    #[cfg(windows)]
+    if !restore || foreground_window() != target {
+        eprintln!("[paste] target is no longer foreground; paste cancelled");
+        return false;
+    }
     send_paste_to(false, None);
     true
 }
@@ -85,15 +97,16 @@ pub fn paste_clip(app: &AppHandle, clip: &Clip, plain_text: bool) -> bool {
 /// focus, so we attach to the target thread's input queue first — the same
 /// trick Ditto and other clipboard managers use.
 #[cfg(windows)]
-fn restore_foreground(target: isize) {
+fn restore_foreground(target: isize, focus: Option<isize>) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, INPUT_KEYBOARD, VK_MENU,
+        KEYEVENTF_KEYUP, INPUT_KEYBOARD, SetFocus, VK_MENU,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+        GetAncestor, GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
+        SetForegroundWindow, GA_ROOT,
     };
 
     let hwnd = HWND(target as *mut _);
@@ -140,9 +153,14 @@ fn restore_foreground(target: isize) {
             );
             let _ = SetForegroundWindow(hwnd);
         }
-        // Activating the top-level window restores its previously focused
-        // child. Setting focus to the wrapper instead can steal it from an
-        // embedded editor (for example an Electron application's input).
+        // Restore only the previously focused child, and only if it still
+        // belongs to the original foreground window. Never focus the wrapper.
+        if let Some(focus) = focus {
+            let child = HWND(focus as *mut _);
+            if IsWindow(child).as_bool() && GetAncestor(child, GA_ROOT) == hwnd {
+                let _ = SetFocus(child);
+            }
+        }
 
         if attached_target.as_bool() {
             AttachThreadInput(current_thread, target_thread, false);
@@ -308,6 +326,23 @@ fn send_paste_to(restore: bool, target: Option<isize>) {
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (restore, target);
+    }
+}
+
+#[cfg(windows)]
+fn focused_child_window(target: isize) -> Option<isize> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO};
+    let hwnd = HWND(target as *mut _);
+    unsafe {
+        let thread = GetWindowThreadProcessId(hwnd, None);
+        if thread == 0 { return None; }
+        let mut info = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        if GetGUIThreadInfo(thread, &mut info).is_err() || info.hwndFocus.0.is_null() {
+            None
+        } else {
+            Some(info.hwndFocus.0 as isize)
+        }
     }
 }
 

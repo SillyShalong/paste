@@ -1,4 +1,4 @@
-name: Build Windows Release
+name: Windows · Build & Release
 
 # Development happens on dev; merging dev into main and pushing is the
 # "ship it" signal — every main push builds the app. Version tags

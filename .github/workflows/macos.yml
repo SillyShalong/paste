@@ -1,4 +1,4 @@
-name: Tests & macOS (Apple Silicon)
+name: macOS · Test, Build & Release
 
 on:
   push:
@@ -59,6 +59,8 @@ jobs:
     needs: [check-windows, check-macos]
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-14
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

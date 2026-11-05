@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Mutex, OnceLock};
 
 use tauri::AppHandle;
@@ -37,6 +37,8 @@ pub struct AppState {
     /// Set while we ourselves write to the clipboard (pasting an old item),
     /// so the listener doesn't re-capture what we just set.
     pub skip_capture: AtomicBool,
+    /// Invalidates foreground watchers from earlier panel openings.
+    pub panel_generation: AtomicU64,
     pub data_dir: PathBuf,
 }
 
@@ -57,6 +59,7 @@ impl AppState {
             db: Mutex::new(db),
             prev_hwnd: Mutex::new(None),
             skip_capture: AtomicBool::new(false),
+            panel_generation: AtomicU64::new(0),
             data_dir,
         })
     }

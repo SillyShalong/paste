@@ -4,6 +4,8 @@ pub mod commands;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod paste;
+#[cfg(any(windows, test))]
+mod panel_autohide;
 pub mod settings;
 pub mod state;
 pub mod store;
@@ -322,17 +324,21 @@ fn force_focus_panel(panel: &tauri::WebviewWindow) {
 }
 
 /// Watchdog hiding the panel when it stops being the foreground window.
-/// The blur-based auto-hide only fires if the panel actually received
-/// keyboard focus; when a focus hand-off was refused by Windows this poll
-/// keeps the "click outside closes the panel" behavior regardless.
+/// WebView2 blur events also occur during internal focus hand-offs, so on
+/// Windows only sustained native foreground changes trigger auto-hide.
 #[cfg(windows)]
 fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow) {
     let Ok(panel_hwnd) = panel.hwnd().map(|h| h.0 as isize) else { return };
+    let generation = app.state::<AppState>().panel_generation.load(Ordering::SeqCst);
     let app = app.clone();
     std::thread::spawn(move || {
         // Grace period while the focus hand-off settles.
         std::thread::sleep(std::time::Duration::from_millis(600));
+        let mut guard = panel_autohide::ForegroundGuard::default();
         loop {
+            if app.state::<AppState>().panel_generation.load(Ordering::SeqCst) != generation {
+                return;
+            }
             let Some(panel) = app.get_webview_window("panel") else { return };
             if !panel.is_visible().unwrap_or(false) {
                 return;
@@ -349,9 +355,22 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
                     GetAncestor(fg, GA_ROOTOWNER).0 as isize
                 }
             };
-            if fg_root != panel_hwnd {
-                let _ = panel.hide();
-                return;
+            if guard.should_hide((fg_root != 0).then_some(fg_root == panel_hwnd)) {
+                // Serialize the hide with show_panel and recheck its generation:
+                // an old watcher must never hide a newly reopened panel.
+                let handle = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    if handle.state::<AppState>().panel_generation.load(Ordering::SeqCst) != generation {
+                        return;
+                    }
+                    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetForegroundWindow, GA_ROOTOWNER};
+                    let fg = unsafe { GetForegroundWindow() };
+                    if !fg.0.is_null() && unsafe { GetAncestor(fg, GA_ROOTOWNER).0 as isize } != panel_hwnd {
+                        if let Some(panel) = handle.get_webview_window("panel") {
+                            let _ = panel.hide();
+                        }
+                    }
+                });
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
         }
@@ -464,15 +483,22 @@ pub fn apply_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>
 /// Show/hide the main panel window.
 /// Register the auto-hide-on-focus-loss behavior for the panel window.
 fn register_panel_autohide(app: &AppHandle) {
-    let handle = app.clone();
-    if let Some(panel) = app.get_webview_window("panel") {
-        panel.on_window_event(move |event| {
-            if let WindowEvent::Focused(false) = event {
-                if let Some(w) = handle.get_webview_window("panel") {
-                    let _ = w.hide();
+    // WebView2 can report blur while focus moves between its child windows.
+    // Windows uses the debounced native foreground watcher instead.
+    #[cfg(windows)]
+    let _ = app;
+    #[cfg(not(windows))]
+    {
+        let handle = app.clone();
+        if let Some(panel) = app.get_webview_window("panel") {
+            panel.on_window_event(move |event| {
+                if let WindowEvent::Focused(false) = event {
+                    if let Some(w) = handle.get_webview_window("panel") {
+                        let _ = w.hide();
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 }
 
@@ -554,6 +580,7 @@ pub fn toggle_panel(app: &AppHandle) {
 }
 
 pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
+    app.state::<AppState>().panel_generation.fetch_add(1, Ordering::SeqCst);
     let state = app.state::<AppState>();
     let pos_pref = state.settings.lock().unwrap().panel_position.clone();
 

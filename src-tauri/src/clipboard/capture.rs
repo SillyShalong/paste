@@ -39,7 +39,8 @@ fn utf16_to_string(bytes: Vec<u8>) -> String {
 
 #[cfg(windows)]
 pub fn read_clipboard() -> Option<ClipContent> {
-    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard};
+    use windows::core::PCWSTR;
+    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW};
 
     // Opening the clipboard can transiently fail while another process holds
     // it; retry briefly.
@@ -69,7 +70,21 @@ pub fn read_clipboard() -> Option<ClipContent> {
             }
         }
 
-        // 2. Image
+        // 2. Image. Prefer a native PNG when the source supplies one: it
+        // retains transparency without guessing from legacy DIB alpha bytes.
+        if out.is_none() {
+            let name: Vec<u16> = "PNG\0".encode_utf16().collect();
+            let format = RegisterClipboardFormatW(PCWSTR(name.as_ptr()));
+            if format != 0 {
+                if let Some(png) = GetClipboardData(format).ok().and_then(|h| hglobal_bytes(h)) {
+                    if image::load_from_memory_with_format(&png, image::ImageFormat::Png).is_ok() {
+                        out = Some(ClipContent::Image { png });
+                    }
+                }
+            }
+        }
+
+        // Fall back to DIB for screenshot tools that do not publish PNG.
         if out.is_none() {
             if let Ok(handle) = GetClipboardData(CF_DIB) {
                 if let Some(bytes) = hglobal_bytes(handle) {

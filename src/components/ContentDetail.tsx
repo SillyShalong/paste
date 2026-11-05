@@ -4,6 +4,7 @@ import { useStore } from "../store/useStore";
 import { api, convertFileSrc } from "../lib/api";
 import { useT } from "../i18n";
 import { isImagePath, parseClipPaths, useImageData } from "./card/FilePreview";
+import { ClipboardImage } from "./card/ClipboardImage";
 
 /// Full-content preview for the selected clip, opened with Space. Scrollable,
 /// selectable, with paste actions — closes with Space or Esc.
@@ -69,7 +70,7 @@ function Body({ clip }: { clip: Clip }) {
     case "image":
       return clip.imagePath ? (
         <div className="detail-img">
-          <img src={convertFileSrc(clip.imagePath)} alt="clipboard image" draggable={false} />
+          <ClipboardImage path={clip.imagePath} />
         </div>
       ) : (
         <div className="detail-text">{t("Image unavailable")}</div>

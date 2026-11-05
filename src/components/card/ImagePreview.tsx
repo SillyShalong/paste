@@ -1,11 +1,11 @@
 import type { Clip } from "../../types";
-import { convertFileSrc } from "../../lib/api";
+import { ClipboardImage } from "./ClipboardImage";
 
 export function ImagePreview({ clip }: { clip: Clip }) {
   if (!clip.imagePath) return <div className="preview plain">Image unavailable</div>;
   return (
     <div className="preview image">
-      <img src={convertFileSrc(clip.imagePath)} alt="clipboard image" draggable={false} />
+      <ClipboardImage path={clip.imagePath} />
     </div>
   );
 }

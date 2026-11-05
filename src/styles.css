@@ -456,6 +456,7 @@ html, body, #root {
 .card-strip { flex: 1; min-height: 0; overflow: hidden; display: flex; }
 
 .cards-row {
+  position: relative;
   display: flex;
   gap: 12px;
   padding: 16px 20px 10px;

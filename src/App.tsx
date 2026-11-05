@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useStore } from "./store/useStore";
 import { api, events } from "./lib/api";
 import ClipboardPanel from "./components/ClipboardPanel";
+import { scrollTarget } from "./lib/navigation.mjs";
 
 export default function App() {
   const init = useStore((s) => s.init);
@@ -94,7 +95,7 @@ export default function App() {
           if (clip) useStore.setState({ detailClipId: clip.id });
           else s.closeDetail();
         }
-        scrollToCard(sel, e.repeat);
+        scrollToCard(sel);
         return;
       }
       if (e.key === "Enter") {
@@ -146,13 +147,44 @@ function scrollDetail(key: string) {
   }
 }
 
-export function scrollToCard(index: number, repeating = false) {
+let scrollFrame = 0;
+let destination = 0;
+let lastFrameTime = 0;
+
+export function scrollToCard(index: number) {
   requestAnimationFrame(() => {
     // Ignore a queued scroll if a newer key press changed the selection.
     if (useStore.getState().sel !== index) return;
     const el = document.querySelector<HTMLElement>(`[data-card-index="${index}"]`);
-    // Repeated key presses arrive faster than a smooth scroll can finish;
-    // restarting that animation on every press makes the selection lag.
-    el?.scrollIntoView({ behavior: repeating ? "instant" : "smooth", block: "nearest", inline: "nearest" });
+    const row = el?.closest<HTMLElement>(".cards-row");
+    if (!el || !row) return;
+    const base = scrollFrame ? destination : row.scrollLeft;
+    destination = scrollTarget(base, row.clientWidth, el.offsetLeft, el.offsetWidth, row.scrollWidth - row.clientWidth);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (scrollFrame) cancelAnimationFrame(scrollFrame);
+      scrollFrame = 0;
+      row.scrollLeft = destination;
+      return;
+    }
+    if (scrollFrame) return;
+    lastFrameTime = 0;
+    const tick = (time: number) => {
+      if (!row.isConnected) {
+        scrollFrame = 0;
+        return;
+      }
+      destination = Math.max(0, Math.min(destination, row.scrollWidth - row.clientWidth));
+      const elapsed = lastFrameTime ? Math.min(time - lastFrameTime, 50) : 16;
+      lastFrameTime = time;
+      const remaining = destination - row.scrollLeft;
+      if (Math.abs(remaining) < 1) {
+        row.scrollLeft = destination;
+        scrollFrame = 0;
+      } else {
+        row.scrollLeft += remaining * (1 - Math.exp(-elapsed / 75));
+        scrollFrame = requestAnimationFrame(tick);
+      }
+    };
+    scrollFrame = requestAnimationFrame(tick);
   });
 }

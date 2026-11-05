@@ -90,7 +90,7 @@ fn restore_foreground(target: isize) {
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, INPUT_KEYBOARD, SetFocus, VK_MENU,
+        KEYEVENTF_KEYUP, INPUT_KEYBOARD, VK_MENU,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
@@ -140,7 +140,9 @@ fn restore_foreground(target: isize) {
             );
             let _ = SetForegroundWindow(hwnd);
         }
-        let _ = SetFocus(hwnd);
+        // Activating the top-level window restores its previously focused
+        // child. Setting focus to the wrapper instead can steal it from an
+        // embedded editor (for example an Electron application's input).
 
         if attached_target.as_bool() {
             AttachThreadInput(current_thread, target_thread, false);

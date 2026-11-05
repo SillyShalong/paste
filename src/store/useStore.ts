@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { moveSelection } from "../lib/navigation.mjs";
 import { api } from "../lib/api";
 import type { Clip, ClipKind, Pinboard, Settings, SourceInfo, View } from "../types";
 
@@ -109,7 +110,7 @@ export const useStore = create<StoreState>((set, get) => ({
   moveSel: (delta) => {
     const n = get().clips.length;
     if (n === 0) return 0;
-    const sel = Math.min(n - 1, Math.max(0, get().sel + delta));
+    const sel = moveSelection(get().sel, delta, n);
     set({ sel });
     return sel;
   },

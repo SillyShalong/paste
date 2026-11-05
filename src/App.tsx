@@ -79,6 +79,8 @@ export default function App() {
         if (inSearch) {
           // let the caret move; only navigate when at the edge
           const el = document.activeElement as HTMLInputElement;
+          // Arrow keys first collapse an existing text selection.
+          if (el.selectionStart !== el.selectionEnd) return;
           const atStart = el.selectionStart === 0;
           const atEnd = el.selectionStart === el.value.length;
           if (e.key === "ArrowLeft" && !atStart) return;
@@ -146,6 +148,8 @@ function scrollDetail(key: string) {
 
 export function scrollToCard(index: number, repeating = false) {
   requestAnimationFrame(() => {
+    // Ignore a queued scroll if a newer key press changed the selection.
+    if (useStore.getState().sel !== index) return;
     const el = document.querySelector<HTMLElement>(`[data-card-index="${index}"]`);
     // Repeated key presses arrive faster than a smooth scroll can finish;
     // restarting that animation on every press makes the selection lag.

@@ -318,7 +318,9 @@ pub fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
     let h = height.unsigned_abs() as usize;
     let w = width as usize;
     let header = bi_size.max(40);
-    let pixel_start = header; // color table not used for 24/32bpp BI_RGB/BITFIELDS
+    // BITMAPINFOHEADER stores the three BI_BITFIELDS masks immediately after
+    // the 40-byte header; larger V4/V5 headers contain the masks themselves.
+    let pixel_start = header.checked_add(if compression == 3 && bi_size == 40 { 12 } else { 0 })?;
     if pixel_start >= dib.len() {
         return None;
     }
@@ -495,5 +497,22 @@ mod tests {
         assert_eq!(a.dimensions(), b.dimensions());
         assert_eq!(a.get_pixel(0, 0), b.get_pixel(0, 0));
         assert_eq!(a.get_pixel(3, 2), b.get_pixel(3, 2));
+    }
+
+    #[test]
+    fn bitfields_info_header_skips_external_masks() {
+        let mut dib = vec![0u8; 40];
+        dib[0..4].copy_from_slice(&40u32.to_le_bytes());
+        dib[4..8].copy_from_slice(&1i32.to_le_bytes());
+        dib[8..12].copy_from_slice(&1i32.to_le_bytes());
+        dib[12..14].copy_from_slice(&1u16.to_le_bytes());
+        dib[14..16].copy_from_slice(&32u16.to_le_bytes());
+        dib[16..20].copy_from_slice(&3u32.to_le_bytes());
+        for mask in [0x00ff0000u32, 0x0000ff00, 0x000000ff] {
+            dib.extend_from_slice(&mask.to_le_bytes());
+        }
+        dib.extend_from_slice(&[0x33, 0x22, 0x11, 0xff]);
+        let png = dib_to_png(&dib).expect("valid DIB");
+        assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8().get_pixel(0, 0).0, [0x11, 0x22, 0x33, 0xff]);
     }
 }

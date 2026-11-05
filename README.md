@@ -12,7 +12,7 @@ English | [简体中文](README.zh-CN.md)
 [![Build](https://img.shields.io/github/actions/workflow/status/SillyShalong/paste/build-release.yml?label=build)](https://github.com/SillyShalong/paste/actions/workflows/build-release.yml)
 [![Downloads](https://img.shields.io/github/downloads/SillyShalong/paste/total?color=10b981)](https://github.com/SillyShalong/paste/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20macOS%2011%2B%20Apple%20Silicon-blue)
-![Built with](https://img.shields.io/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
+![Built with](https://img.shields.io/badge/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
 
 <img src="docs/screenshot-panel.png" width="100%" alt="Paste main panel" />
 
@@ -224,6 +224,9 @@ npx tauri icon src-tauri/icons/app-icon.png          # platform icon set (icns/i
 ```
 
 Stack: **Tauri 2** (Rust backend) + **React 18 / TypeScript** frontend + SQLite.
+Before submitting changes, run `npm test`, `npm run typecheck`, and
+`cargo test --locked --manifest-path src-tauri/Cargo.toml` on a supported
+Windows or macOS development machine. CI runs these checks before builds.
 The Windows clipboard pipeline is event-driven (no polling); macOS polls
 `NSPasteboard.changeCount`. Paste restores focus to the previous app
 (`AttachThreadInput` / `activateWithOptions:`), and all data lives in

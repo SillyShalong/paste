@@ -37,6 +37,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Frontend checks
+        run: npm run typecheck && npm test
+
+      - name: Rust unit tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+
       - name: Build Tauri app (release)
         run: npx tauri build
 

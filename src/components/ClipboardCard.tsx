@@ -32,8 +32,15 @@ export default function ClipboardCard({
       className={`card ${selected ? "selected" : ""}`}
       data-card-index={index}
       style={{ ["--source-color" as string]: color }}
-      onMouseEnter={(e) => useStore.getState().setSel(index)}
-      onClick={() => useStore.getState().paste()}
+      // Scrolling cards beneath a stationary pointer fires mouseenter; do not
+      // let that overwrite the keyboard selection. React to mouse movement.
+      onMouseMove={(e) => {
+        if (e.movementX !== 0 || e.movementY !== 0) useStore.getState().setSel(index);
+      }}
+      onClick={() => {
+        useStore.getState().setSel(index);
+        useStore.getState().paste();
+      }}
       onDoubleClick={() => {
         useStore.getState().setSel(index);
         useStore.getState().openDetail();

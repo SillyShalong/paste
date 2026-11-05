@@ -28,8 +28,10 @@ jobs:
       - run: npm ci
       - name: Frontend typecheck
         run: npx tsc --noEmit
+      - name: Frontend tests
+        run: npm test
       - name: Rust unit tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
 
   # macos-14 runners are M1 (Apple Silicon). This is the only way to compile
   # the macOS backend without owning a Mac — it type-checks macos.rs and the
@@ -52,8 +54,10 @@ jobs:
       - run: npm ci
       - name: Frontend typecheck
         run: npx tsc --noEmit
+      - name: Frontend tests
+        run: npm test
       - name: Rust unit tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Rust check (aarch64-apple-darwin)
         run: cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
 

@@ -12,7 +12,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/SillyShalong/paste/build-release.yml?label=build)](https://github.com/SillyShalong/paste/actions/workflows/build-release.yml)
 [![Downloads](https://img.shields.io/github/downloads/SillyShalong/paste/total?color=10b981)](https://github.com/SillyShalong/paste/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20macOS%2011%2B%20Apple%20Silicon-blue)
-![Built with](https://img.shields.io/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
+![Built with](https://img.shields.io/badge/built%20with-Rust%20%2B%20Tauri%20%2B%20React-f05032)
 
 <img src="docs/screenshot-panel.png" width="100%" alt="Paste 主面板" />
 
@@ -210,6 +210,9 @@ npx tauri icon src-tauri/icons/app-icon.png          # 平台图标集 (icns/ico
 ```
 
 技术栈：**Tauri 2**（Rust 后端）+ **React 18 / TypeScript** 前端 + SQLite。
+提交修改前，请在受支持的 Windows 或 macOS 开发环境运行 `npm test`、
+`npm run typecheck` 和 `cargo test --locked --manifest-path src-tauri/Cargo.toml`。
+CI 会在构建前执行这些检查。
 Windows 剪贴板管线为事件驱动（无轮询）；macOS 轮询
 `NSPasteboard.changeCount`。粘贴时会把焦点还给之前的应用
 （`AttachThreadInput` / `activateWithOptions:`），数据位于

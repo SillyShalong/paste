@@ -6,8 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 # Paste
 
-**A beautiful, keyboard-first clipboard manager — bringing the beloved
-[Paste for macOS](https://pasteapp.io) experience to Windows & macOS.**
+**A visual, keyboard-first clipboard manager for Windows and macOS.**
 
 [![Release](https://img.shields.io/github/v/release/SillyShalong/paste?include_prereleases&color=4f46e5)](https://github.com/SillyShalong/paste/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/SillyShalong/paste/build-release.yml?label=build)](https://github.com/SillyShalong/paste/actions/workflows/build-release.yml)
@@ -26,9 +25,8 @@ in one searchable strip, one keystroke away.*
 
 ## Why Paste?
 
-Your OS clipboard gives you `Win+V` / "recent items"… and then forgets
-everything the moment you reboot, buries your history in a tiny menu, and
-gives you zero organization.
+Paste makes clipboard history easy to browse, search, and organize across
+Windows and macOS.
 
 Paste keeps **everything you copy**, in a visual card strip that spans your
 screen — each card tagged with the app it came from — and lets you paste
@@ -65,8 +63,10 @@ Two flavors on the [Releases](https://github.com/SillyShalong/paste/releases) pa
 
 ### macOS (Apple Silicon)
 
-Build from source on an M-series Mac (see [Development](#️-development)), or
-grab the `Paste-macos-aarch64` artifact / `.dmg` from CI or a release tag.
+Download the Apple Silicon `.dmg` or app archive from the
+[Releases](https://github.com/SillyShalong/paste/releases) page, or build from
+source on an M-series Mac (see [Development](#️-development)). CI builds are
+also available as `Paste-macos-aarch64` artifacts.
 
 > **Requirements:** macOS 11+ on Apple Silicon. Pasting into other apps needs
 > the **Accessibility** permission (System Settings → Privacy & Security →
@@ -239,13 +239,7 @@ standalone probe of the macOS AppKit bindings.
 - [x] Multi-monitor panel placement
 - [x] Space full-content preview
 - [x] Tray icon themes
-- [x] **macOS port (Apple Silicon)** — shipped on `main`
+- [x] **macOS support (Apple Silicon)**
 - [x] Settings localization (English / 简体中文)
 - [ ] Paste Stack (queue multiple clips, paste in order)
 - [ ] OCR search inside images
-
-## 🙏 Acknowledgements
-
-Designed with love as a tribute to
-[Paste for macOS](https://pasteapp.io) — the clipboard manager that set the bar.
-If you're on a Mac, buy their subscription; otherwise, welcome home. 💜

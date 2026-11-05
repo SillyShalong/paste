@@ -6,8 +6,7 @@
 
 # Paste
 
-**一款优雅的、键盘优先的剪贴板管理器 —— 将广受喜爱的
-[Paste for macOS](https://pasteapp.io) 体验带给 Windows 与 macOS。**
+**一款支持 Windows 和 macOS、以键盘操作为主的可视化剪贴板管理器。**
 
 [![Release](https://img.shields.io/github/v/release/SillyShalong/paste?include_prereleases&color=4f46e5)](https://github.com/SillyShalong/paste/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/SillyShalong/paste/build-release.yml?label=build)](https://github.com/SillyShalong/paste/actions/workflows/build-release.yml)
@@ -26,8 +25,7 @@
 
 ## 为什么选择 Paste？
 
-系统自带的剪贴板给你 `Win+V` / "最近复制的内容"……然后在你重启的一瞬间全部
-忘光，把历史藏进一个小菜单里，不提供任何整理能力。
+Paste 让你在 Windows 和 macOS 上方便地浏览、搜索和整理剪贴板历史。
 
 Paste **保留你复制过的一切**：一条横贯屏幕的可视化卡片带 —— 每张卡片都标注了
 内容来自哪个应用 —— 让你按一次键，就能以任意顺序把任何内容粘贴回任何应用。
@@ -58,8 +56,9 @@ Paste **保留你复制过的一切**：一条横贯屏幕的可视化卡片带 
 
 ### macOS（Apple Silicon）
 
-在 M 系列 Mac 上从源码构建（见[开发](#️-开发)），或从 CI 产物 / release 标签
-获取 `Paste-macos-aarch64` 产物 / `.dmg`。
+从 [Releases](https://github.com/SillyShalong/paste/releases) 页面下载 Apple Silicon
+版本的 `.dmg` 或应用压缩包，也可以在 M 系列 Mac 上从源码构建（见[开发](#️-开发)）。
+CI 还提供 `Paste-macos-aarch64` 构建产物。
 
 > **系统要求：** macOS 11+ 且为 Apple Silicon。粘贴到其他应用需要
 > **辅助功能**权限（系统设置 → 隐私与安全性 → 辅助功能 → 添加 Paste）；
@@ -226,13 +225,7 @@ Windows 剪贴板管线为事件驱动（无轮询）；macOS 轮询
 - [x] 多显示器面板定位
 - [x] Space 全文预览
 - [x] 托盘图标主题
-- [x] **macOS 移植（Apple Silicon）** —— 已随 `main` 发布
+- [x] **macOS 支持（Apple Silicon）**
 - [x] 设置界面本地化（English / 简体中文）
 - [ ] Paste Stack（多条内容排队，按序粘贴）
 - [ ] 图片内容 OCR 搜索
-
-## 🙏 致谢
-
-以爱设计，向 [Paste for macOS](https://pasteapp.io) 致敬 ——
-它定义了剪贴板管理器的标杆。如果你用 Mac，请购买他们的订阅；
-否则，欢迎回家。💜

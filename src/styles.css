@@ -466,8 +466,15 @@ html, body, #root {
   scrollbar-width: thin;
   scrollbar-color: var(--bg-elevated-strong) transparent;
 }
-.cards-row::-webkit-scrollbar { height: 8px; }
-.cards-row::-webkit-scrollbar-thumb { background: var(--bg-elevated-strong); border-radius: 4px; }
+.cards-row::-webkit-scrollbar { height: 8px; background: transparent; }
+.cards-row::-webkit-scrollbar-track,
+.cards-row::-webkit-scrollbar-corner { background: transparent; }
+.cards-row::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated-strong);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 4px;
+}
 
 /* ---------- Cards ---------- */
 

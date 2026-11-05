@@ -11,6 +11,9 @@ on:
 
 jobs:
   build-windows:
+    # For a commit pushed together with a release tag, include [tag-build]
+    # in its subject to let the tag run perform the build once.
+    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
     runs-on: windows-latest
     permissions:
       contents: write # needed only when attaching a release on tags

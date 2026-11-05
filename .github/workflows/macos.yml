@@ -12,6 +12,8 @@ on:
 jobs:
   # Fast regression net for both platforms: typecheck + unit tests.
   check-windows:
+    # Release commits marked [tag-build] are checked by the tag run instead.
+    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +35,7 @@ jobs:
   # the macOS backend without owning a Mac — it type-checks macos.rs and the
   # whole cfg(target_os = "macos") tree against the real target.
   check-macos:
+    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4

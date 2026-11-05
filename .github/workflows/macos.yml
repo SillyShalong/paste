@@ -92,7 +92,8 @@ jobs:
       - name: Zip the .app bundle
         run: |
           cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
-          zip -q -r -y "Paste_${{ github.ref_name }}_aarch64.app.zip" Paste.app
+          safe_ref="${GITHUB_REF_NAME//\//-}"
+          zip -q -r -y "Paste_${safe_ref}_aarch64.app.zip" Paste.app
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

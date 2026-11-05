@@ -81,7 +81,12 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addClip: (clip) => {
     const { view, kindFilter, query } = get();
-    if (query || kindFilter !== "all") return; // filtered views don't live-update
+    if (query || kindFilter !== "all") {
+      // Re-run the active query so newly captured items appear when they
+      // match the current filter, including screenshots in the image view.
+      void get().refetch();
+      return;
+    }
     const inView =
       view.type === "history" ? clip.pinboardId === null : clip.pinboardId === view.id;
     if (!inView) return;

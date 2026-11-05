@@ -120,6 +120,32 @@ fn utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// Some clipboard owners publish their data shortly after the notification.
+/// Retry only while the clipboard sequence remains unchanged so a later copy
+/// cannot be attributed to this notification.
+#[cfg(windows)]
+fn read_clipboard_with_retry() -> Option<ClipContent> {
+    use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+    let sequence = unsafe { GetClipboardSequenceNumber() };
+    for attempt in 0..5 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            if unsafe { GetClipboardSequenceNumber() } != sequence {
+                return None;
+            }
+        }
+        if let Some(content) = capture::read_clipboard() {
+            return Some(content);
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn read_clipboard_with_retry() -> Option<ClipContent> {
+    capture::read_clipboard()
+}
+
 /// The capture pipeline. Runs on the listener thread whenever the clipboard
 /// changes.
 fn on_clipboard_update() {
@@ -139,7 +165,7 @@ fn on_clipboard_update() {
         return;
     }
 
-    let content = match capture::read_clipboard() {
+    let content = match read_clipboard_with_retry() {
         Some(c) => c,
         None => return,
     };

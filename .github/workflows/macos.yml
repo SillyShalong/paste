@@ -27,6 +27,9 @@ jobs:
           try {
             $output = & ([scriptblock]::Create($script)) -DelaySeconds 0
             $report = $output | ConvertFrom-Json
+            $json = $output -join "`n"
+            $encoded = $json -replace '%','%25' -replace "`r",'%0D' -replace "`n",'%0A'
+            Write-Output "::notice::$encoded"
             if (-not $report.panel.visible -or $null -eq $report.footer -or $null -eq $report.cards) {
               throw 'Automatic panel sampling failed'
             }

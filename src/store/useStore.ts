@@ -29,6 +29,7 @@ interface StoreState {
   openDetail: () => void;
   closeDetail: () => void;
   paste: (plain?: boolean) => Promise<void>;
+  copyAgain: (id?: number) => Promise<void>;
   deleteClip: (id?: number) => Promise<void>;
   pinSelected: () => Promise<void>;
   clearHistory: () => Promise<void>;
@@ -134,6 +135,14 @@ export const useStore = create<StoreState>((set, get) => ({
     const clip = clips[sel];
     if (!clip) return;
     await api.pasteClip(clip.id, plain);
+  },
+
+  copyAgain: async (id?: number) => {
+    const { clips, sel } = get();
+    const target = id ?? clips[sel]?.id;
+    if (target == null) return;
+    const ok = await api.copyClip(target);
+    if (ok) get().showToast("Copied to clipboard");
   },
 
   deleteClip: async (id) => {

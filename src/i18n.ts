@@ -78,6 +78,7 @@ const zh: Record<string, string> = {
 
   // Toasts / messages
   "History cleared": "历史已清空",
+  "Copied to clipboard": "已复制到剪贴板",
   "Create a Pinboard first": "请先创建一个 Pinboard",
 
   // Settings — general
@@ -149,6 +150,7 @@ const zh: Record<string, string> = {
   About: "关于",
   "Create pinboards from the panel sidebar.": "在面板侧栏创建收藏板。",
   "Data stays on this machine.": "数据仅保存在本机。",
+  "Inspired by Paste for macOS.": "灵感来自 Paste for macOS。",
   Build: "构建类型",
   "Compiler profile this binary was built with": "此二进制文件的编译配置",
   "Built at": "构建时间",

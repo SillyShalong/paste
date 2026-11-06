@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::clipboard;
 use crate::paste;
 use crate::settings::{self, AppSettings};
 use crate::state::AppState;
@@ -141,6 +142,25 @@ pub fn paste_clip(app: AppHandle, id: i64, plain: Option<bool>) -> bool {
             paste::paste_clip(&app, &clip, plain);
         })
         .is_ok()
+}
+
+/// Copy a history clip back to the clipboard WITHOUT restoring focus or
+/// synthesizing a keystroke — the card context menu's "Copy Again". Unlike
+/// paste_clip this is safe to run on the IPC thread: no sleeps involved, and
+/// the skip-capture guard lapses 80 ms after the write.
+#[tauri::command]
+pub fn copy_clip(app: AppHandle, id: i64, plain: Option<bool>) -> bool {
+    let state = app.state::<AppState>();
+    let clip = {
+        let db = state.db.lock().unwrap();
+        store::get_clip(&db, id).ok().flatten()
+    };
+    let Some(clip) = clip else { return false };
+    let Some(content) = paste::clip_to_content(&clip, plain.unwrap_or(false)) else {
+        return false;
+    };
+    let _guard = paste::SkipCaptureGuard::new(&state.skip_capture);
+    clipboard::set::set_clipboard(&content)
 }
 
 #[tauri::command]

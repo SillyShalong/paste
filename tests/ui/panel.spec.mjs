@@ -143,6 +143,23 @@ test("empty history shows the empty state", async ({ page }) => {
   await expect(page.locator(".empty-state")).toBeVisible();
 });
 
+test("Copy Again copies without pasting (no keystroke, no focus grab)", async ({ page }) => {
+  await page.locator(".card").first().click({ button: "right" });
+  await page.getByText("Copy Again").click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        copy: window.__invoked.filter((c) => c.cmd === "copy_clip").length,
+        paste: window.__invoked.filter((c) => c.cmd === "paste_clip").length,
+      })),
+    )
+    .toEqual({ copy: 1, paste: 0 });
+  const copiedId = await page.evaluate(
+    () => window.__invoked.find((c) => c.cmd === "copy_clip")?.args.id,
+  );
+  expect(copiedId).toBe(FIXTURE_CLIPS[0].id);
+});
+
 test("pinboard creation calls IPC and lists the board", async ({ page }) => {
   await page.getByRole("button", { name: "+ New Pinboard" }).click();
   await page.locator(".board-input").fill("Work");

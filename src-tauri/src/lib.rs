@@ -228,6 +228,7 @@ pub fn run() {
             commands::read_file_image,
             commands::list_clips,
             commands::paste_clip,
+            commands::copy_clip,
             commands::delete_clip,
             commands::toggle_pin,
             commands::clear_history,

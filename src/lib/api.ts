@@ -32,6 +32,9 @@ export const api = {
 
   pasteClip: (id: number, plain = false) => invoke<boolean>("paste_clip", { id, plain }),
 
+  /// Copy a history clip back to the clipboard without pasting (Copy Again).
+  copyClip: (id: number, plain = false) => invoke<boolean>("copy_clip", { id, plain }),
+
   deleteClip: (id: number) => invoke<boolean>("delete_clip", { id }),
 
   setPinboard: (id: number, pinboardId: number | null) =>

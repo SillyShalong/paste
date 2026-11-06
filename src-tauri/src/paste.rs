@@ -225,7 +225,8 @@ pub fn quick_paste_index(app: &AppHandle, index: i64) {
 
 /// Build the clipboard payload for a clip. Returns None when the content is
 /// gone (e.g. the image file was deleted), so callers can abort cleanly.
-fn clip_to_content(clip: &Clip, plain_text: bool) -> Option<ClipContent> {
+/// Shared by paste (keystroke) and copy_clip (clipboard-only write).
+pub(crate) fn clip_to_content(clip: &Clip, plain_text: bool) -> Option<ClipContent> {
     match clip.kind {
         ClipKind::Image => {
             let png = std::fs::read(clip.image_path.as_ref()?).ok()?;

@@ -165,7 +165,7 @@ function ContextMenu({
       <MenuItem
         label={t("Copy Again")}
         onClick={() => {
-          useStore.getState().paste();
+          useStore.getState().copyAgain(clip.id);
           onClose();
         }}
       />

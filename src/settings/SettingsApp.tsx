@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { isMac, modLabel } from "../lib/platform";
 import { useT } from "../i18n";
@@ -11,6 +12,7 @@ interface TrayIconOption {
 }
 
 export default function SettingsApp() {
+  const [layoutReport, setLayoutReport] = useState("");
   const t = useT();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pinboards, setPinboards] = useState<Pinboard[]>([]);
@@ -324,6 +326,11 @@ export default function SettingsApp() {
 
       <section className="settings-section">
         <h2>{t("About")}</h2>
+        <button className="btn" onClick={() => {
+          invoke<string>("get_panel_layout_report").then(setLayoutReport).catch(e => setLayoutReport(String(e)));
+        }}>{t("Show display diagnostics")}</button>
+        {layoutReport && <textarea aria-label="Display diagnostics" readOnly value={layoutReport}
+          onFocus={e => e.currentTarget.select()} style={{ width: "100%", height: 240, marginTop: 12, userSelect: "text" }} />}
         <div className="about-head">
           <img src="/app-icon.png" alt="Paste" className="about-icon" />
           <div>

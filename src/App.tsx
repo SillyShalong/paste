@@ -3,8 +3,10 @@ import { useStore } from "./store/useStore";
 import { api, events } from "./lib/api";
 import ClipboardPanel from "./components/ClipboardPanel";
 import { scrollTarget } from "./lib/navigation.mjs";
+import { usePanelDiagnostics } from "./lib/usePanelDiagnostics";
 
 export default function App() {
+  usePanelDiagnostics();
   const init = useStore((s) => s.init);
   const store = useStore;
 

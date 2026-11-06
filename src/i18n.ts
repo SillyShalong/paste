@@ -5,6 +5,7 @@ import { useStore } from "./store/useStore";
 export type Lang = "en" | "zh";
 
 const zh: Record<string, string> = {
+  "Show display diagnostics": "显示绘制诊断信息",
   // Panel — search / filters
   "Search clipboard history…": "搜索剪贴板历史…",
   All: "全部",

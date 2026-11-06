@@ -1,6 +1,7 @@
 pub mod appinfo;
 pub mod clipboard;
 pub mod commands;
+mod panel_diagnostics;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod paste;
@@ -224,6 +225,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_initial,
+            panel_diagnostics::record_panel_layout,
+            panel_diagnostics::get_panel_layout_report,
             commands::list_tray_icons,
             commands::read_file_image,
             commands::list_clips,

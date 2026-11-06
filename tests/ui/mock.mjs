@@ -42,6 +42,11 @@ export const MOCK_SCRIPT = `
     pinboards: [],
   };
   window.__ipcState = state;
+  window.__fireEvent = (event, payload) => {
+    for (const id of (window.__eventHandlers || {})[event] || []) {
+      window.__callbacks?.[id]?.({ event, id: Date.now(), payload });
+    }
+  };
   window.__TAURI_INTERNALS__ = {
     invoke(cmd, args = {}) {
       window.__invoked.push({ cmd, args });
@@ -86,13 +91,24 @@ export const MOCK_SCRIPT = `
           state.pinboards.push(board);
           return Promise.resolve(board);
         }
+        case "copy_clip":
+        case "paste_clip":
+          return Promise.resolve(true);
         case "plugin:event|listen":
+          window.__eventHandlers = window.__eventHandlers || {};
+          (window.__eventHandlers[args.event] ||= []).push(args.handler);
+          return Promise.resolve(args.handler ?? 1);
         case "plugin:event|unlisten":
           return Promise.resolve(1);
         default:
           return Promise.resolve(null);
       }
     },
-    transformCallback: (cb) => cb,
+    transformCallback: (cb) => {
+      window.__nextCbId = (window.__nextCbId || 0) + 1;
+      window.__callbacks = window.__callbacks || {};
+      window.__callbacks[window.__nextCbId] = cb;
+      return window.__nextCbId;
+    },
   };
 `;

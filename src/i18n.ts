@@ -80,6 +80,9 @@ const zh: Record<string, string> = {
   "History cleared": "历史已清空",
   "Copied to clipboard": "已复制到剪贴板",
   "Create a Pinboard first": "请先创建一个 Pinboard",
+  Done: "完成",
+  "Pinned to {name}": "已置顶到 {name}",
+  "Unpinned from {name}": "已从 {name} 取消置顶",
 
   // Settings — general
   "Paste Settings": "Paste 设置",
@@ -173,6 +176,11 @@ export function translateTo(lang: Lang, en: string): string {
 
 /// Subscribe the component to the language (derived from settings) and return
 /// a translate function bound to it, so switching language re-renders.
+/// Non-hook variant for store actions (no reactivity needed there).
+export function tFor(pref: string | undefined): (en: string) => string {
+  return (en: string) => translateTo(resolveLang(pref), en);
+}
+
 export function useT(): (en: string) => string {
   const pref = useStore((s) => s.settings?.language ?? "system");
   const lang = resolveLang(pref);

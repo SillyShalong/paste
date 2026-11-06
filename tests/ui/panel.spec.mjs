@@ -171,3 +171,84 @@ test("pinboard creation calls IPC and lists the board", async ({ page }) => {
     .toBe(true);
   await expect(page.locator(".board-name")).toHaveText("Work");
 });
+
+test("a live clipboard:new event inserts the clip at the top", async ({ page }) => {
+  const fresh = { ...FIXTURE_CLIPS[0], id: 99, text: "live event clip", createdAt: Date.now() };
+  await page.evaluate((payload) => window.__fireEvent("clipboard:new", payload), fresh);
+  await expect(page.locator(".card")).toHaveCount(FIXTURE_CLIPS.length + 1);
+  await expect(page.locator(".card").first()).toContainText("live event clip");
+});
+
+test("detail preview stays in sync while browsing with arrow keys", async ({ page }) => {
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toContainText("alpha note");
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toContainText("https://example.com");
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toContainText("alpha note");
+});
+
+test("delete from the detail header removes the clip and closes", async ({ page }) => {
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await page.locator(".detail-header .btn.danger").click();
+  await expect(page.locator(".detail-overlay")).toHaveCount(0);
+  await expect(page.locator(".card")).toHaveCount(FIXTURE_CLIPS.length - 1);
+});
+
+test("board view shows only the clips pinned to that board", async ({ page }) => {
+  // Seed the BACKEND via an init script: reload-safe (addInitScript reruns
+  // before the app on every load) and refetch serves it like SQLite would.
+  await page.addInitScript(() => {
+    const backend = window.__ipcState;
+    backend.pinboards.push({ id: 1, name: "Work", position: 0, createdAt: 1700000000000 });
+    backend.clips.push({ ...backend.clips[0], id: 50, pinboardId: 1, text: "pinned to work" });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.__store.getState().clips.length > 0);
+  await page.locator(".board-item", { hasText: "Work" }).click();
+  await page.waitForTimeout(400);
+  console.log("DBG-BOARD", await page.evaluate(() => ({
+    view: window.__store.getState().view,
+    n: window.__store.getState().clips.length,
+    pins: window.__store.getState().clips.map((c) => c.pinboardId),
+    calls: window.__invoked.filter((c) => c.cmd === "list_clips").slice(-2).map((c) => c.args),
+  })));
+  await expect(page.locator(".board-chip")).toHaveText("Work");
+  await expect(page.locator(".card")).toHaveCount(1);
+  await expect(page.locator(".card")).toContainText("pinned to work");
+});
+
+test("wheel over the strip scrolls horizontally", async ({ page }) => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    ...FIXTURE_CLIPS[0], id: 100 + i, text: `clip number ${i}`,
+  }));
+  await page.evaluate((clips) => window.__store.setState({ clips }), many);
+  const before = await page.evaluate(
+    () => document.querySelector(".cards-row")?.scrollLeft ?? -1,
+  );
+  await page.evaluate(() => {
+    document
+      .querySelector(".cards-row")
+      ?.dispatchEvent(new WheelEvent("wheel", { deltaY: 300, bubbles: true }));
+  });
+  await page.waitForTimeout(150);
+  const after = await page.evaluate(
+    () => document.querySelector(".cards-row")?.scrollLeft ?? -1,
+  );
+  expect(after).toBeGreaterThan(before);
+});
+
+test("Copy Again shows the copied toast", async ({ page }) => {
+  await page.locator(".card").first().click({ button: "right" });
+  await page.getByText("Copy Again").click();
+  await expect(page.locator(".toast")).toContainText("Copied to clipboard");
+});

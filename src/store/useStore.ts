@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { moveSelection } from "../lib/navigation.mjs";
+import { tFor } from "../i18n";
 import { api } from "../lib/api";
 import type { Clip, ClipKind, Pinboard, Settings, SourceInfo, View } from "../types";
 
@@ -171,7 +172,15 @@ export const useStore = create<StoreState>((set, get) => ({
     await api.setPinboard(clip.id, targetId);
     await get().refetch();
     const board = pinboards.find((p) => p.id === targetId);
-    get().showToast(board ? (clip.pinboardId === targetId ? `Unpinned from ${board.name}` : `Pinned to ${board.name}`) : "Done");
+    const t = tFor(get().settings?.language);
+    get().showToast(
+      board
+        ? t(clip.pinboardId === targetId ? "Unpinned from {name}" : "Pinned to {name}").replace(
+            "{name}",
+            board.name,
+          )
+        : t("Done"),
+    );
   },
 
   clearHistory: async () => {

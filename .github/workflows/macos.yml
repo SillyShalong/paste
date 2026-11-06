@@ -33,12 +33,12 @@ jobs:
       - name: Rust unit tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
 
-  # macos-14 runners are M1 (Apple Silicon). This is the only way to compile
+  # macos-15 runners use Apple Silicon. This is the only way to compile
   # the macOS backend without owning a Mac — it type-checks macos.rs and the
   # whole cfg(target_os = "macos") tree against the real target.
   check-macos:
     if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,7 +65,7 @@ jobs:
   build-macos:
     needs: [check-windows, check-macos]
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: write
     steps:

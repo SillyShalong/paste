@@ -59,3 +59,21 @@ pub fn get_panel_layout_report() -> Result<String, String> {
     serde_json::to_string_pretty(&json!({"version": env!("CARGO_PKG_VERSION"), "samples": &*samples}))
         .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_report_serializes_only_display_measurements() {
+        let sample: LayoutSample = serde_json::from_value(json!({
+            "event": "pointer-leave", "viewport": [1920, 440, 1, 0, 0],
+            "panel": [0, 0, 1920, 440], "footer": [200, 400, 1720, 40],
+            "backgrounds": ["rgba(26,26,31,0.86)", "rgba(0,0,0,0.1)"],
+            "clipboardText": "must not appear in the diagnostic report"
+        })).unwrap();
+        let report = serde_json::to_value(sample).unwrap();
+        assert_eq!(report["footer"], json!([200.0, 400.0, 1720.0, 40.0]));
+        assert!(report.get("clipboardText").is_none());
+    }
+}

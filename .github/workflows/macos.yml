@@ -30,6 +30,14 @@ jobs:
         run: npx tsc --noEmit
       - name: Frontend tests
         run: npm test
+      # Real-browser UI gate: runs the panel frontend in headless Chromium
+      # with the Tauri IPC layer mocked. Placed on the Windows check (fast
+      # runners, no macOS queue) — the frontend under test is identical
+      # across platforms.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: UI tests (headless)
+        run: npm run test:ui
       - name: Rust unit tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
 

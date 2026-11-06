@@ -204,6 +204,15 @@ npm run tauri dev      # run with hot reload
 npm run tauri build    # NSIS installer + portable zip
 ```
 
+Test suites:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml   # backend logic (classification, round-trips)
+npm test                                          # frontend logic (navigation, scroll math)
+npm run test:ui                                   # real-browser UI tests (headless Chromium,
+                                                  # Tauri IPC mocked; auto-starts the vite server)
+```
+
 **macOS (Apple Silicon)** — prerequisites: Node.js LTS, Rust via rustup:
 
 ```bash

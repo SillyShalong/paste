@@ -108,7 +108,11 @@ export default function App() {
         s.pinSelected();
         return;
       }
-      if (e.key === "Delete" || (mod && (e.key === "d" || e.key === "D"))) {
+      if (
+        !inSearch &&
+        !onOtherInput &&
+        (e.key === "Delete" || (mod && (e.key === "d" || e.key === "D")))
+      ) {
         e.preventDefault();
         s.deleteClip();
         return;

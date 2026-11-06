@@ -15,3 +15,5 @@ src-tauri/gen/schemas/
 /gear-crop.png
 /chip-crop.png
 .wv2-test/
+test-results/
+playwright-report/

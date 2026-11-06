@@ -17,6 +17,7 @@ public class WhiteStripProbe {
     [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint process);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowLong(IntPtr h, int index);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder name, int length);
 }
 '@
@@ -44,6 +45,8 @@ function Read-NativeWindow([IntPtr]$Handle) {
         class = $name.ToString()
         process = $(if ($owner) { $owner.ProcessName } else { 'unavailable' })
         processId = $ownerId
+        style = ('0x{0:X8}' -f [WhiteStripProbe]::GetWindowLong($Handle, -16))
+        extendedStyle = ('0x{0:X8}' -f [WhiteStripProbe]::GetWindowLong($Handle, -20))
         hasRect = $hasRect
         bounds = @($rect.Left, $rect.Top, ($rect.Right-$rect.Left), ($rect.Bottom-$rect.Top))
     }

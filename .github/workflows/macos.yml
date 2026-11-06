@@ -35,3 +35,9 @@ jobs:
             }
             $output
           } finally { $form.Dispose() }
+      - name: Validate read-only runtime inspection
+        shell: pwsh
+        run: |
+          $script = Get-Content -Raw scripts/inspect-webview-runtime.ps1
+          $report = & ([scriptblock]::Create($script)) | ConvertFrom-Json
+          if (-not $report.windows) { throw 'Windows version missing' }

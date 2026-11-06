@@ -579,10 +579,15 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
 /// lifetime.
 #[cfg(windows)]
 fn strip_system_window_border(panel: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
     const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
 
     if let Ok(hwnd) = panel.hwnd() {
+        // panel.hwnd() returns the HWND of tauri's own `windows` crate
+        // version, which differs from ours — reconstruct our HWND from the
+        // raw pointer (same repr) instead of passing the foreign type.
+        let hwnd = HWND(hwnd.0);
         let none: u32 = DWMWA_COLOR_NONE;
         let result = unsafe {
             DwmSetWindowAttribute(

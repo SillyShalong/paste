@@ -38,6 +38,16 @@ jobs:
           Start-Sleep -Seconds 5
           1..12 | ForEach-Object { Set-Clipboard "Native panel test card $_"; Start-Sleep -Milliseconds 150 }
           node scripts/check-windows-panel.cjs
+      - name: Report native diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($p in @('ui-stderr.log','ui-results/bounds.json')) {
+            if (Test-Path $p) {
+              $s = (Get-Content -Raw $p) -replace '%','%25' -replace "`r",'%0D' -replace "`n",'%0A'
+              Write-Output "::notice::$p $s"
+            }
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

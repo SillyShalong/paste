@@ -10,15 +10,17 @@ const native = (body) => execFileSync('powershell.exe', ['-NoProfile', '-Command
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class PanelProbe {
  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect r);
  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h,out Rect r);
  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string c,string t);
  public struct Rect { public int Left,Top,Right,Bottom; }
 }'
+[void][PanelProbe]::SetProcessDPIAware()
 $h=[PanelProbe]::FindWindow($null,'Paste')
 $r=New-Object PanelProbe+Rect
 [void][PanelProbe]::GetWindowRect($h,[ref]$r)
-${body}`], { encoding: 'utf8' }).trim();
+${body}`], { encoding: 'utf8', windowsHide: true }).trim();
 
 (async () => {
   let browser;
@@ -67,4 +69,9 @@ ${body}`], { encoding: 'utf8' }).trim();
   await page.waitForTimeout(300);
   await capture('moved-out');
   await browser.close();
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => {
+  const detail = String(error.stack || error) + (error.stderr ? '\n' + error.stderr.toString() : '');
+  console.error(detail);
+  console.log('::error::' + detail.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  process.exitCode = 1;
+});

@@ -6,6 +6,8 @@ pub mod macos;
 pub mod paste;
 #[cfg(any(windows, test))]
 mod panel_autohide;
+#[cfg(any(windows, test))]
+mod panel_geometry;
 pub mod settings;
 pub mod state;
 pub mod store;
@@ -598,15 +600,9 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
         // then size and place the panel precisely.
         let _ = panel.set_position(tauri::PhysicalPosition::new(mx, my));
         let scale = panel.scale_factor().unwrap_or(1.0);
-        let target_h = (PANEL_HEIGHT * scale).round() as i32;
-        let margin = (12.0 * scale).round() as i32;
-        let y = match pos_pref.as_str() {
-            "top" => my + margin,
-            "bottom" => my + mh - target_h - margin,
-            _ => my + (mh - target_h) / 2,
-        };
-        let _ = panel.set_size(tauri::PhysicalSize::new(mw as u32, target_h as u32));
-        let _ = panel.set_position(tauri::PhysicalPosition::new(mx, y));
+        let (x, y, width, height) = panel_geometry::panel_bounds((mx, my, mw, mh), scale, &pos_pref);
+        let _ = panel.set_size(tauri::PhysicalSize::new(width, height));
+        let _ = panel.set_position(tauri::PhysicalPosition::new(x, y));
     }
     #[cfg(target_os = "macos")]
     {
@@ -645,7 +641,7 @@ pub fn show_panel(app: &AppHandle, panel: &tauri::WebviewWindow) {
     spawn_panel_foreground_watcher(app, panel);
 }
 
-/// Physical monitor area (x, y, width, height) for the given window; falls
+/// Physical work area (excluding the taskbar) for the given window; falls
 /// back to the monitor under the cursor when the window is unknown.
 #[cfg(windows)]
 fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
@@ -669,10 +665,10 @@ fn monitor_area_for(prev_hwnd: Option<isize>) -> Option<(i32, i32, i32, i32)> {
         };
         if GetMonitorInfoW(hmon, &mut mi).as_bool() {
             Some((
-                mi.rcMonitor.left,
-                mi.rcMonitor.top,
-                mi.rcMonitor.right - mi.rcMonitor.left,
-                mi.rcMonitor.bottom - mi.rcMonitor.top,
+                mi.rcWork.left,
+                mi.rcWork.top,
+                mi.rcWork.right - mi.rcWork.left,
+                mi.rcWork.bottom - mi.rcWork.top,
             ))
         } else {
             None

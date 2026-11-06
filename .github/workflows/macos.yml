@@ -97,6 +97,11 @@ jobs:
       # "Privacy & Security → Accessibility" approval pasting needs.
       - name: Stable-sign the app bundle
         run: ./scripts/codesign-stable.sh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Paste.app
+      # The bundler's Finder AppleScript (DMG background + icon layout)
+      # silently no-ops on headless runners, so inject a visible
+      # install-guide text file into the volume as the reliable instructions.
+      - name: Inject install guide into the dmg
+        run: ./scripts/patch-dmg.sh src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Paste_*_aarch64.dmg src-tauri/dmg-install-guide.txt
       - name: Zip the .app bundle
         run: |
           cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos

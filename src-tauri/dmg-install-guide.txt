@@ -1,0 +1,34 @@
+========================================================
+  Paste 安装指南（请先阅读）
+  Install Guide — read me first
+========================================================
+
+① 安装
+   把本卷中的 Paste.app 拖入「Applications」文件夹
+   （等价于复制到 /Applications）
+
+② 首次打开若提示「已损坏，建议移到废纸篓」
+   应用没有损坏——这是 macOS 对未公证应用的下载隔离。
+   打开「终端」执行一次即可正常使用：
+
+       xattr -cr /Applications/Paste.app
+
+③ 允许粘贴功能（必需）
+   系统设置 → 隐私与安全性 → 辅助功能 → 打开 Paste 开关。
+   把历史记录粘贴到其他应用依赖此权限；未授权时设置页
+   会显示提示横幅。
+
+④ 开始使用
+   · 点击顶部菜单栏的 Paste 图标，或按 Cmd+Shift+V 呼出面板
+   · 复制任意内容，卡片会实时出现在面板中
+   · Enter 粘贴 · Space 预览 · Cmd+1~9 快速粘贴
+   · Cmd+Enter 纯文本粘贴 · 右键卡片查看更多操作
+
+数据仅保存在本机（SQLite），无网络上传，无遥测。
+
+English quick start:
+  1) Drag Paste.app into Applications
+  2) If macOS reports the app "damaged", run once:
+     xattr -cr /Applications/Paste.app
+  3) System Settings -> Privacy & Security -> Accessibility -> enable Paste
+  4) Open the panel from the menu bar icon or Cmd+Shift+V

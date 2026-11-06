@@ -15,21 +15,49 @@
       "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src 'self' ipc: http://ipc.localhost ws://localhost:5173; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/**"]
+        "scope": [
+          "$APPDATA/**"
+        ]
       }
     },
     "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "app", "dmg"],
-    "icon": ["icons/icon.ico", "icons/icon.png", "icons/icon.icns"],
+    "targets": [
+      "nsis",
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "background": "./dmg-background.png",
+        "windowSize": {
+          "width": 720,
+          "height": 460
+        },
+        "appPosition": {
+          "x": 190,
+          "y": 165
+        },
+        "applicationFolderPosition": {
+          "x": 448,
+          "y": 165
+        }
+      }
     },
     "windows": {
       "nsis": {
-        "languages": ["English", "SimpChinese"],
+        "languages": [
+          "English",
+          "SimpChinese"
+        ],
         "displayLanguageSelector": true
       }
     }

@@ -11,5 +11,19 @@ jobs:
       - name: Run read-only native probe
         shell: pwsh
         run: |
+          Add-Type -AssemblyName System.Windows.Forms
+          $form = New-Object System.Windows.Forms.Form
+          $form.Text = 'Paste'
+          $form.Width = 800
+          $form.Height = 600
+          $form.Show()
+          [System.Windows.Forms.Application]::DoEvents()
           $script = Get-Content -Raw scripts/probe-white-strip.ps1
-          & ([scriptblock]::Create($script)) -DelaySeconds 0
+          try {
+            $output = & ([scriptblock]::Create($script)) -DelaySeconds 0
+            $report = $output | ConvertFrom-Json
+            if (-not $report.panel.visible -or $null -eq $report.footer -or $null -eq $report.cards) {
+              throw 'Automatic panel sampling failed'
+            }
+            $output
+          } finally { $form.Dispose() }

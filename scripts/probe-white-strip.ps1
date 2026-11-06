@@ -1,14 +1,31 @@
-param([int]$DelaySeconds = 8)
+param([int]$DelaySeconds = 8, [string]$ProcessName = 'paste')
 
 # Read-only: identify the native window under the pointer, without capturing
 # clipboard contents, screen pixels, window titles, or executable paths.
 $ErrorActionPreference = 'Stop'
-if (-not ('WhiteStripProbeV2' -as [type])) {
+if (-not ('WhiteStripProbeV3' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
-public class WhiteStripProbeV2 {
+public class WhiteStripProbeV3 {
+    public delegate bool EnumCallback(IntPtr h, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumCallback callback, IntPtr data);
+    public static IntPtr FindProcessWindow(uint process) {
+        IntPtr best = IntPtr.Zero;
+        long largest = -1;
+        EnumWindows((h, data) => {
+            uint owner;
+            GetWindowThreadProcessId(h, out owner);
+            Rect rect;
+            if (owner == process && IsWindowVisible(h) && GetWindowRect(h, out rect)) {
+                long area = (long)(rect.Right-rect.Left) * (rect.Bottom-rect.Top);
+                if (area > largest) { best = h; largest = area; }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return best;
+    }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
@@ -26,55 +43,59 @@ public class WhiteStripProbeV2 {
 '@
 }
 
-[void][WhiteStripProbeV2]::SetProcessDPIAware()
+[void][WhiteStripProbeV3]::SetProcessDPIAware()
 Write-Host "In $DelaySeconds seconds: open Paste, reproduce the white strip and leave the panel open. Footer sampling is automatic."
 Start-Sleep -Seconds $DelaySeconds
-$point = New-Object WhiteStripProbeV2+Point
-if (-not [WhiteStripProbeV2]::GetCursorPos([ref]$point)) { throw 'Cannot read pointer position.' }
-$hit = [WhiteStripProbeV2]::WindowFromPoint($point)
+$point = New-Object WhiteStripProbeV3+Point
+if (-not [WhiteStripProbeV3]::GetCursorPos([ref]$point)) { throw 'Cannot read pointer position.' }
+$hit = [WhiteStripProbeV3]::WindowFromPoint($point)
 if ($hit -eq [IntPtr]::Zero) { throw 'No window found under the pointer.' }
-$root = [WhiteStripProbeV2]::GetAncestor($hit, 2)
+$root = [WhiteStripProbeV3]::GetAncestor($hit, 2)
 if ($root -eq [IntPtr]::Zero) { $root = $hit }
 
 function Read-NativeWindow([IntPtr]$Handle) {
     [uint32]$ownerId = 0
-    [void][WhiteStripProbeV2]::GetWindowThreadProcessId($Handle, [ref]$ownerId)
+    [void][WhiteStripProbeV3]::GetWindowThreadProcessId($Handle, [ref]$ownerId)
     $name = New-Object Text.StringBuilder 256
-    [void][WhiteStripProbeV2]::GetClassName($Handle, $name, $name.Capacity)
-    $rect = New-Object WhiteStripProbeV2+Rect
-    $hasRect = [WhiteStripProbeV2]::GetWindowRect($Handle, [ref]$rect)
+    [void][WhiteStripProbeV3]::GetClassName($Handle, $name, $name.Capacity)
+    $rect = New-Object WhiteStripProbeV3+Rect
+    $hasRect = [WhiteStripProbeV3]::GetWindowRect($Handle, [ref]$rect)
     $owner = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
     [ordered]@{
         class = $name.ToString()
         process = $(if ($owner) { $owner.ProcessName } else { 'unavailable' })
         processId = $ownerId
-        style = ('0x{0:X8}' -f [WhiteStripProbeV2]::GetWindowLong($Handle, -16))
-        extendedStyle = ('0x{0:X8}' -f [WhiteStripProbeV2]::GetWindowLong($Handle, -20))
+        style = ('0x{0:X8}' -f [WhiteStripProbeV3]::GetWindowLong($Handle, -16))
+        extendedStyle = ('0x{0:X8}' -f [WhiteStripProbeV3]::GetWindowLong($Handle, -20))
         hasRect = $hasRect
         bounds = @($rect.Left, $rect.Top, ($rect.Right-$rect.Left), ($rect.Bottom-$rect.Top))
     }
 }
 
 function Read-Point([int]$X, [int]$Y) {
-    $p = New-Object WhiteStripProbeV2+Point
+    $p = New-Object WhiteStripProbeV3+Point
     $p.X = $X
     $p.Y = $Y
-    $h = [WhiteStripProbeV2]::WindowFromPoint($p)
+    $h = [WhiteStripProbeV3]::WindowFromPoint($p)
     if ($h -eq [IntPtr]::Zero) { return $null }
-    $r = [WhiteStripProbeV2]::GetAncestor($h, 2)
+    $r = [WhiteStripProbeV3]::GetAncestor($h, 2)
     if ($r -eq [IntPtr]::Zero) { $r = $h }
     [ordered]@{ point = @($X,$Y); hitWindow = Read-NativeWindow $h; rootWindow = Read-NativeWindow $r }
 }
 
-$panelHandle = [WhiteStripProbeV2]::FindWindow($null, 'Paste')
+$panelHandle = [IntPtr]::Zero
+foreach ($appProcess in @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)) {
+    $candidate = [WhiteStripProbeV3]::FindProcessWindow([uint32]$appProcess.Id)
+    if ($candidate -ne [IntPtr]::Zero) { $panelHandle = $candidate; break }
+}
 $panelInfo = $null
 $footer = $null
 $cards = $null
 $bottom = $null
 if ($panelHandle -ne [IntPtr]::Zero) {
     $details = Read-NativeWindow $panelHandle
-    $visible = [WhiteStripProbeV2]::IsWindowVisible($panelHandle)
-    $dpi = [WhiteStripProbeV2]::GetDpiForWindow($panelHandle)
+    $visible = [WhiteStripProbeV3]::IsWindowVisible($panelHandle)
+    $dpi = [WhiteStripProbeV3]::GetDpiForWindow($panelHandle)
     $panelInfo = [ordered]@{ window = $details; visible = $visible; dpi = $dpi }
     if ($visible) {
         $b = $details.bounds

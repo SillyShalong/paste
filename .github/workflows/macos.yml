@@ -25,7 +25,7 @@ jobs:
           [System.Windows.Forms.Application]::DoEvents()
           $script = Get-Content -Raw scripts/probe-white-strip.ps1
           try {
-            $output = & ([scriptblock]::Create($script)) -DelaySeconds 0
+            $output = & ([scriptblock]::Create($script)) -DelaySeconds 0 -ProcessName pwsh
             $report = $output | ConvertFrom-Json
             $json = $output -join "`n"
             $encoded = $json -replace '%','%25' -replace "`r",'%0D' -replace "`n",'%0A'

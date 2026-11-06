@@ -64,3 +64,93 @@ test("Enter pastes the selected clip through the IPC bridge", async ({ page }) =
     )
     .toBe(true);
 });
+
+test("Delete removes the selected clip and hits the backend", async ({ page }) => {
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true })),
+  );
+  await expect(page.locator(".card")).toHaveCount(FIXTURE_CLIPS.length - 1);
+  const deletedId = await page.evaluate(
+    () => window.__invoked.find((c) => c.cmd === "delete_clip")?.args.id,
+  );
+  expect(deletedId).toBe(FIXTURE_CLIPS[0].id);
+});
+
+test("Delete while typing in search does NOT delete a clip (regression)", async ({ page }) => {
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.press("Delete");
+  await expect(page.locator(".card")).toHaveCount(FIXTURE_CLIPS.length);
+  const deletes = await page.evaluate(
+    () => window.__invoked.filter((c) => c.cmd === "delete_clip").length,
+  );
+  expect(deletes).toBe(0);
+});
+
+test("Space opens the full-content preview and Esc closes it", async ({ page }) => {
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await expect(page.locator(".detail-overlay")).toContainText("alpha note");
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toHaveCount(0);
+});
+
+test("pause toggle hits the backend and the banner renders on state change", async ({ page }) => {
+  // The button calls toggle_pause directly; the banner updates via the
+  // pause:changed event, which the mock never fires — so simulate the
+  // event's store effect for the rendering half of the assertion.
+  await page.getByRole("button", { name: "Pause history" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__ipcState.paused))
+    .toBe(true);
+  const called = await page.evaluate(() =>
+    window.__invoked.some((c) => c.cmd === "toggle_pause"),
+  );
+  expect(called).toBe(true);
+  await page.evaluate(() => window.__store.setState({ paused: true }));
+  await expect(page.locator(".paused-banner")).toBeVisible();
+  await page.getByRole("button", { name: "Resume history" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__ipcState.paused))
+    .toBe(false);
+});
+
+test("theme switch updates the panel attribute", async ({ page }) => {
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, theme: "light" } });
+  });
+  await expect(page.locator('.panel[data-theme="light"]')).toHaveCount(1);
+});
+
+test("language switch renders Chinese labels", async ({ page }) => {
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, language: "zh" } });
+  });
+  await expect(page.locator(".search-input")).toHaveAttribute(
+    "placeholder",
+    "搜索剪贴板历史…",
+  );
+});
+
+test("empty history shows the empty state", async ({ page }) => {
+  await page.evaluate(() => window.__store.setState({ clips: [] }));
+  await expect(page.locator(".empty-state")).toBeVisible();
+});
+
+test("pinboard creation calls IPC and lists the board", async ({ page }) => {
+  await page.getByRole("button", { name: "+ New Pinboard" }).click();
+  await page.locator(".board-input").fill("Work");
+  await page.locator(".board-input").press("Enter");
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.__invoked.some((c) => c.cmd === "create_pinboard")),
+    )
+    .toBe(true);
+  await expect(page.locator(".board-name")).toHaveText("Work");
+});

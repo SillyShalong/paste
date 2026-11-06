@@ -539,9 +539,19 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
             interactive: false,
         });
 
-        match builder.build()
-        {
+        // Windows: with `transparent: true` the page is see-through, but the
+        // WebView2 control's OWN default background stays white until the
+        // page paints — it surfaces as white edges/corners around the
+        // frosted panel, worst during hover and resize (the compositor
+        // rebuilds translucent layers there). Pin the default background to
+        // (0,0,0,0) so every unpainted pixel is transparent, not white.
+        #[cfg(windows)]
+        let builder = builder.background_color(tauri::utils::config::Color(0, 0, 0, 0));
+
+        match builder.build() {
             Ok(w) => {
+                #[cfg(windows)]
+                strip_system_window_border(&w);
                 built = Some(w);
                 break;
             }
@@ -558,6 +568,32 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
             Ok(w)
         }
         None => Err(last_err.expect("at least one attempt")),
+    }
+}
+
+/// Windows 11 draws a subtle DWM border (and rounding) on every top-level
+/// window, even undecorated ones. On the dark translucent panel that system
+/// border reads as a light/white edge — remove it with DWMWA_BORDER_COLOR =
+/// DWMWA_COLOR_NONE. Needs no redraw; the setting persists for the window's
+/// lifetime.
+#[cfg(windows)]
+fn strip_system_window_border(panel: &tauri::WebviewWindow) {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
+    const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
+
+    if let Ok(hwnd) = panel.hwnd() {
+        let none: u32 = DWMWA_COLOR_NONE;
+        let result = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                &none as *const u32 as *const std::ffi::c_void,
+                std::mem::size_of::<u32>() as u32,
+            )
+        };
+        if let Err(e) = result {
+            eprintln!("[paste] DWM border strip failed: {e}");
+        }
     }
 }
 

@@ -218,6 +218,14 @@ pub fn run() {
                 );
             }
 
+            // Native UI checks use the real panel placement/focus path. This
+            // startup switch is absent from release builds.
+            #[cfg(debug_assertions)]
+            if std::env::var("PASTE_UI_TEST").as_deref() == Ok("1") {
+                let handle = app.handle().clone();
+                app.handle().run_on_main_thread(move || toggle_panel(&handle))?;
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

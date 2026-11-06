@@ -10,6 +10,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  windows-panel-ui:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npx tauri build --debug --no-bundle
+      - name: Exercise native panel and record rendering
+        shell: pwsh
+        run: |
+          npm install --prefix "$env:RUNNER_TEMP/panel-tools" --no-save playwright-core@1.56.1
+          $env:PLAYWRIGHT_CORE_PATH = "$env:RUNNER_TEMP/panel-tools/node_modules/playwright-core"
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
+          $env:PASTE_UI_TEST = '1'
+          Start-Process src-tauri/target/debug/paste.exe -RedirectStandardOutput ui-stdout.log -RedirectStandardError ui-stderr.log
+          Start-Sleep -Seconds 5
+          1..12 | ForEach-Object { Set-Clipboard "Native panel test card $_"; Start-Sleep -Milliseconds 150 }
+          node scripts/check-windows-panel.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-panel-rendering
+          path: |
+            ui-results/
+            ui-*.log
+
   # Fast regression net for both platforms: typecheck + unit tests.
   check-windows:
     # Release commits marked [tag-build] are checked by the tag run instead.

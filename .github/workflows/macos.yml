@@ -1,114 +1,15 @@
-name: macOS · Test, Build & Release
-
+name: Validate native window probe
 on:
-  push:
-    branches: [main, dev]
-    tags: ["v*"]
-    paths-ignore:
-      - "**.md"
-  pull_request:
   workflow_dispatch:
-
 jobs:
-  # Fast regression net for both platforms: typecheck + unit tests.
-  check-windows:
-    # Release commits marked [tag-build] are checked by the tag run instead.
-    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
+  probe:
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: npm ci
-      - name: Frontend typecheck
-        run: npx tsc --noEmit
-      - name: Frontend tests
-        run: npm test
-      - name: Rust unit tests
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-
-  # macos-15 runners use Apple Silicon. This is the only way to compile
-  # the macOS backend without owning a Mac — it type-checks macos.rs and the
-  # whole cfg(target_os = "macos") tree against the real target.
-  check-macos:
-    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[tag-build]')
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: npm ci
-      - name: Frontend typecheck
-        run: npx tsc --noEmit
-      - name: Frontend tests
-        run: npm test
-      - name: Rust unit tests
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - name: Rust check (aarch64-apple-darwin)
-        run: cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
-
-  # Full macOS app bundle, on demand or on version tags.
-  build-macos:
-    needs: [check-windows, check-macos]
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: macos-15
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: npm ci
-      - name: Build macOS app (aarch64)
-        run: npx tauri build --target aarch64-apple-darwin --bundles app,dmg
-      # Re-sign with a requirement keyed to the bundle identifier: Tauri's
-      # ad-hoc signature binds the TCC accessibility grant to the exact
-      # binary cdhash, so an updated download would silently lose the
-      # "Privacy & Security → Accessibility" approval pasting needs.
-      - name: Stable-sign the app bundle
-        run: ./scripts/codesign-stable.sh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Paste.app
-      - name: Zip the .app bundle
+      - name: Run read-only native probe
+        shell: pwsh
         run: |
-          cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
-          safe_ref="${GITHUB_REF_NAME//\//-}"
-          zip -q -r -y "Paste_${safe_ref}_aarch64.app.zip" Paste.app
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Paste-macos-aarch64-${{ github.run_number }}
-          if-no-files-found: error
-          path: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.zip
-
-      # Tags additionally publish the .dmg + .app zip on a GitHub Release.
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.zip
-          generate_release_notes: true
+          $script = Get-Content -Raw scripts/probe-white-strip.ps1
+          & ([scriptblock]::Create($script)) -DelaySeconds 0

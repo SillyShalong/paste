@@ -72,6 +72,12 @@ also available as `Paste-macos-aarch64` artifacts.
 > the **Accessibility** permission (System Settings → Privacy & Security →
 > Accessibility → add Paste); the app shows a banner in Settings until it's
 > granted, and the grant survives updates thanks to identifier-based signing.
+>
+> **First run of a downloaded copy:** the app is ad-hoc signed (no Apple
+> Developer account → not notarized), so macOS may claim "Paste.app is
+> damaged and can't be opened". Nothing is broken — it's the download
+> quarantine. Clear it once and open normally:
+> `xattr -cr /Applications/Paste.app`
 
 ## ✨ Features
 

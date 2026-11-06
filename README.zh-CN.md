@@ -64,6 +64,11 @@ CI 还提供 `Paste-macos-aarch64` 构建产物。
 > **辅助功能**权限（系统设置 → 隐私与安全性 → 辅助功能 → 添加 Paste）；
 > 授权前设置页会显示提示横幅。得益于基于标识符的签名，授权在应用更新后
 > 依然有效。
+>
+> **首次运行下载的副本：** 应用采用 ad-hoc 签名（无 Apple 开发者账号，
+> 无法公证），macOS 可能提示 "Paste.app is damaged and can't be opened"。
+> 应用并未损坏——这只是下载隔离标记。清除一次即可正常打开：
+> `xattr -cr /Applications/Paste.app`
 
 ## ✨ 功能
 

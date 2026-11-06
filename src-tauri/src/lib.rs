@@ -332,9 +332,8 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
     let generation = app.state::<AppState>().panel_generation.load(Ordering::SeqCst);
     let app = app.clone();
     std::thread::spawn(move || {
-        // End the startup grace as soon as the panel receives focus; clicks
-        // outside should not have to wait for a fixed startup sleep.
-        let started = std::time::Instant::now();
+        // Grace period while the focus hand-off settles.
+        std::thread::sleep(std::time::Duration::from_millis(600));
         let mut guard = panel_autohide::ForegroundGuard::default();
         loop {
             if app.state::<AppState>().panel_generation.load(Ordering::SeqCst) != generation {
@@ -356,7 +355,7 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
                     GetAncestor(fg, GA_ROOTOWNER).0 as isize
                 }
             };
-            if guard.should_hide((fg_root != 0).then_some(fg_root == panel_hwnd), started.elapsed() >= std::time::Duration::from_millis(600)) {
+            if guard.should_hide((fg_root != 0).then_some(fg_root == panel_hwnd)) {
                 // Serialize the hide with show_panel and recheck its generation:
                 // an old watcher must never hide a newly reopened panel.
                 let handle = app.clone();
@@ -373,7 +372,7 @@ fn spawn_panel_foreground_watcher(app: &AppHandle, panel: &tauri::WebviewWindow)
                     }
                 });
             }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            std::thread::sleep(std::time::Duration::from_millis(150));
         }
     });
 }

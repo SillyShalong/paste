@@ -126,6 +126,15 @@ html, body, #root {
   -webkit-backdrop-filter: none;
 }
 
+/* Avoid the translucent backdrop/animation compositor path on Windows while
+   investigating white regions reported during panel hover and resize. */
+.panel:not([data-platform="mac"]) {
+  background: var(--bg-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(14px) scale(0.99); }
   to { opacity: 1; transform: none; }
@@ -490,10 +499,11 @@ html, body, #root {
   border: 1px solid transparent;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.14s, background 0.14s, box-shadow 0.14s;
+  transition: transform 0.14s cubic-bezier(0.2, 0.9, 0.3, 1), border-color 0.14s, background 0.14s;
 }
 .card:hover { background: var(--card-bg-hover); }
 .card.selected {
+  transform: scale(1.05);
   border-color: var(--source-color, var(--accent));
   background: var(--card-bg-hover);
   box-shadow:

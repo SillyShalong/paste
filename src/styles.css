@@ -126,6 +126,15 @@ html, body, #root {
   -webkit-backdrop-filter: none;
 }
 
+/* Match the opaque native WebView2 surface on Windows. Using only an opaque
+   CSS background still leaves the native window alpha-composited. */
+.panel[data-platform="windows"] {
+  background: var(--bg-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(14px) scale(0.99); }
   to { opacity: 1; transform: none; }

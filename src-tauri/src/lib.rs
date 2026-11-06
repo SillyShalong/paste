@@ -518,12 +518,17 @@ fn create_panel(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         )
         .title("Paste")
         .decorations(false)
-        .transparent(true)
+        // A CSS background does not disable the native alpha-composited
+        // WebView2 surface. Use an opaque native surface on Windows too.
+        .transparent(!cfg!(windows))
         .always_on_top(true)
         .visible(false)
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false);
+
+        #[cfg(windows)]
+        let builder = builder.background_color(tauri::utils::config::Color(26, 26, 31, 255));
 
         // macOS: frosted glass via the native NSVisualEffectView material.
         // CSS backdrop-filter over a transparent WKWebView composes unreliably

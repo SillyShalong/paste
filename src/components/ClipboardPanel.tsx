@@ -19,7 +19,7 @@ export default function ClipboardPanel() {
     <div
       className="panel"
       data-theme={theme === "system" ? undefined : theme}
-      data-platform={isMac ? "mac" : undefined}
+      data-platform={isMac ? "mac" : "windows"}
     >
       <div className="panel-body">
         <Sidebar />

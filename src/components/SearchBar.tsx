@@ -25,6 +25,16 @@ export default function SearchBar() {
   const pinboards = useStore((s) => s.pinboards);
   const settings = useStore((s) => s.settings);
   const paused = useStore((s) => s.paused);
+  const searchMode = settings?.searchMode ?? "plain";
+
+  let invalidRegex = false;
+  if (searchMode === "regex" && query) {
+    try {
+      new RegExp(query);
+    } catch {
+      invalidRegex = true;
+    }
+  }
 
   const board = view.type === "board" ? pinboards.find((p) => p.id === view.id) : null;
 
@@ -49,6 +59,11 @@ export default function SearchBar() {
           <GearIcon />
         </button>
       </div>
+      {invalidRegex && (
+        <div className="search-error">
+          {t("Invalid regular expression — matching is paused until it is fixed")}
+        </div>
+      )}
       <div className="filter-row">
         {board && <span className="board-chip">{board.name}</span>}
         {FILTERS.map((f) => (

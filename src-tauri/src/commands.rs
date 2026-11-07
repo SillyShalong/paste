@@ -87,7 +87,7 @@ pub fn get_initial(app: AppHandle) -> InitialData {
         settings,
         pinboards: store::list_pinboards(&db).unwrap_or_default(),
         // History view: unpinned clips only (mirrors live-update filtering).
-        clips: store::list_clips(&db, Some(None), "", None, 100, 0).unwrap_or_default(),
+        clips: store::list_clips(&db, Some(None), "", "plain", None, 100, 0).unwrap_or_default(),
         sources: store::distinct_sources(&db)
             .unwrap_or_default()
             .into_iter()
@@ -106,6 +106,7 @@ pub fn list_clips(
     // mode of the store layer is intentionally not reachable here.)
     pinboard_id: Option<i64>,
     search: Option<String>,
+    search_mode: Option<String>,
     kind: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
@@ -116,6 +117,15 @@ pub fn list_clips(
         &db,
         Some(pinboard_id),
         search.as_deref().unwrap_or(""),
+        // Frontend sends its current mode; sanitize against SQL injection of
+        // unexpected syntax names (unknown names fall back to plain LIKE).
+        {
+            let m = search_mode.as_deref().unwrap_or("plain");
+            match m {
+                "wildcard" | "regex" => m,
+                _ => "plain",
+            }
+        },
         kind.as_deref().and_then(ClipKind::from_str),
         limit.unwrap_or(100),
         offset.unwrap_or(0),

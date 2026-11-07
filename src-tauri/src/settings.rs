@@ -25,6 +25,10 @@ pub struct AppSettings {
     /// flipping the value back and forth cannot corrupt anything.
     #[serde(default)]
     pub retention_days: i64,
+    /// Search syntax: "plain" (substring, default), "wildcard" (* = any run,
+    /// ? = one char) or "regex" (case-insensitive Rust regex).
+    #[serde(default)]
+    pub search_mode: String,
     /// Paste as plain text by default (Paste has this option).
     #[serde(default)]
     pub always_plain_text: bool,
@@ -74,6 +78,7 @@ impl Default for AppSettings {
             quick_paste: true,
             max_clips: 0,
             retention_days: 0,
+            search_mode: "plain".into(),
             always_plain_text: false,
             excluded_apps: default_excluded_apps(),
             paused: false,

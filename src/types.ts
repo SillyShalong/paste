@@ -27,6 +27,7 @@ export interface Settings {
   hotkey: string;
   quickPaste: boolean;
   maxClips: number;
+  searchMode: string;
   retentionDays: number;
   alwaysPlainText: boolean;
   excludedApps: string[];

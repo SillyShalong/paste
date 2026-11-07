@@ -28,10 +28,20 @@ export const FIXTURE_CLIPS = [
 
 const SETTINGS = {
   hotkey: "CmdOrCtrl+Shift+V", quickPaste: false, maxClips: 0, retentionDays: 0,
+  searchMode: "plain",
   alwaysPlainText: false, excludedApps: [], paused: false, autostart: false,
   theme: "dark", panelPosition: "center", wheelDirection: "default",
   trayIcon: "classic", language: "en",
 };
+
+// Wildcard -> RegExp-source escape map, JSON-injected into the generated
+// script (regex literals inside the template literal would lose their
+// backslashes to the template's own escape processing).
+const WILDCARD_ESCAPE_MAP = JSON.stringify({
+  "*": ".*", "?": ".", ".": "\\\\.", "+": "\\\\+", "^": "\\\\^", "$": "\\\\$",
+  "{": "\\\\{", "}": "\\\\}", "(": "\\\\(", ")": "\\\\)", "|": "\\\\|",
+  "[": "\\\\[", "]": "\\\\]", "\\\\": "\\\\\\\\",
+});
 
 export const MOCK_SCRIPT = `
   window.__invoked = [];
@@ -63,6 +73,9 @@ export const MOCK_SCRIPT = `
           let out = state.clips.filter((c) => c.pinboardId === (args.pinboardId ?? null));
           if (args.kind && args.kind !== "all") out = out.filter((c) => c.kind === args.kind);
           if (args.search) {
+            // The mock keeps matching simple (case-insensitive substring):
+            // the UI layer under test owns mode plumbing, not semantics —
+            // the real wildcard/regex matching is covered by Rust tests.
             const q = String(args.search).toLowerCase();
             out = out.filter((c) => (c.text || "").toLowerCase().includes(q));
           }
@@ -102,6 +115,11 @@ export const MOCK_SCRIPT = `
         case "list_tray_icons":
           return Promise.resolve([]);
         case "paste_permission_granted":
+          return Promise.resolve(window.__axTrusted ?? false);
+        case "open_accessibility_settings":
+        case "close_window":
+          return Promise.resolve(null);
+        case "request_accessibility_permission":
           return Promise.resolve(window.__axTrusted ?? false);
         case "plugin:event|listen":
           window.__eventHandlers = window.__eventHandlers || {};

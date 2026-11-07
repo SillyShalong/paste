@@ -932,3 +932,14 @@ select, .settings-root input[type="text"], .settings-root input[type="number"] {
   margin-top: 4px; background: none; border: none; cursor: pointer;
   color: var(--text-faint); font-size: 12px; text-decoration: underline;
 }
+
+/* invalid regex hint under the search box */
+.search-error {
+  margin: 4px 16px 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(255, 99, 99, 0.12);
+  border: 1px solid rgba(255, 99, 99, 0.4);
+  color: #ff8a8a;
+  font-size: 12px;
+}

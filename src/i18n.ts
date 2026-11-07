@@ -147,6 +147,13 @@ const zh: Record<string, string> = {
   "Applying will delete unpinned clips older than {{days}} days now. Pinned items are kept.":
     "应用后将立即删除 {{days}} 天前的未置顶内容，置顶项保留。",
   "Apply and clean up": "应用并清理",
+  "Search syntax": "搜索语法",
+  "How the search box interprets what you type": "搜索框如何解读你输入的内容",
+  "Plain substring (default)": "常规子串（默认）",
+  "Wildcard: * = any text, ? = one character": "通配符：* 任意文本，? 单个字符",
+  "Regular expression (case-insensitive)": "正则表达式（忽略大小写）",
+  "Invalid regular expression — matching is paused until it is fixed":
+    "正则表达式无效——修正前暂停匹配",
   Confirm: "确认",
 
   // Settings — excluded apps

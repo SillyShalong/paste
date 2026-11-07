@@ -75,6 +75,7 @@ export const useStore = create<StoreState>((set, get) => ({
     const clips = await api.listClips({
       pinboardId,
       search: query,
+      searchMode: get().settings?.searchMode ?? "plain",
       kind: kindFilter === "all" ? null : kindFilter,
       limit: 100,
     });

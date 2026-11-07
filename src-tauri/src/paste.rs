@@ -196,7 +196,7 @@ pub fn quick_paste_index(app: &AppHandle, index: i64) {
     let clips = {
         let db = state.db.lock().unwrap();
         // Mirror the History view: unpinned clips only.
-        store::list_clips(&db, Some(None), "", None, index, 0).unwrap_or_default()
+        store::list_clips(&db, Some(None), "", "plain", None, index, 0).unwrap_or_default()
     };
     let Some(clip) = clips.get(index as usize - 1).cloned() else {
         return;

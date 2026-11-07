@@ -79,9 +79,49 @@ pub struct Pinboard {
     pub created_at: i64,
 }
 
+/// Register the REGEXP scalar function used by regex search mode. The
+/// compiled regex is cached per connection thread and re-compiled only when
+/// the pattern changes; an invalid pattern matches nothing (never errors).
+fn register_regexp_function(conn: &Connection) -> rusqlite::Result<()> {
+    use regex::Regex;
+    use std::cell::RefCell;
+
+    conn.create_scalar_function(
+        "regexp",
+        2,
+        rusqlite::functions::FunctionFlags::SQLITE_UTF8
+            | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx: &rusqlite::functions::Context| {
+            // Compiled-regex cache keyed by pattern (regex clone is cheap);
+            // an invalid pattern matches nothing instead of erroring.
+            thread_local! {
+                static CACHE: RefCell<Option<(String, Regex)>> = const { RefCell::new(None) };
+            }
+            let pattern: String = ctx.get(0)?;
+            let text: String = ctx.get(1)?;
+            CACHE.with(|cache| {
+                let mut slot = cache.borrow_mut();
+                let matches = match slot.as_ref() {
+                    Some((cached, re)) if cached == &pattern => re.is_match(&text),
+                    _ => match Regex::new(&format!("(?i){pattern}")) {
+                        Ok(re) => {
+                            let hit = re.is_match(&text);
+                            *slot = Some((pattern, re));
+                            return Ok(hit);
+                        }
+                        Err(_) => false,
+                    },
+                };
+                Ok(matches)
+            })
+        },
+    )
+}
+
 pub fn open_db(data_dir: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(data_dir.join("paste.db"))?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
+    register_regexp_function(&conn)?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.execute_batch(
         r#"
@@ -182,10 +222,29 @@ const CLIP_COLS: &str =
 
 /// List clips, newest first. `pinboard_id`: Some(Some(id)) = clips of that
 /// pinboard; Some(None) = unpinned history; None = everything.
+/// Translate a user wildcard pattern into a LIKE pattern: `*` matches any
+/// run, `?` one character, everything else (including % _ \) is literal.
+fn wildcard_to_like(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len() + 8);
+    for ch in pattern.chars() {
+        match ch {
+            '*' => out.push('%'),
+            '?' => out.push('_'),
+            '%' | '_' | '\\' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 pub fn list_clips(
     conn: &Connection,
     pinboard_id: Option<Option<i64>>,
     search: &str,
+    search_mode: &str,
     kind: Option<ClipKind>,
     limit: i64,
     offset: i64,
@@ -204,13 +263,29 @@ pub fn list_clips(
         None => {}
     }
     if !search.is_empty() {
-        // Escape LIKE wildcards so "100%" or "a_b" match literally.
-        let escaped = search
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_");
-        sql.push_str(" AND text LIKE '%' || ? || '%' ESCAPE '\\'");
-        args.push(Box::new(escaped));
+        match search_mode {
+            "wildcard" => {
+                // * = any run, ? = one char; everything else literal.
+                let pattern = format!("%{}%", wildcard_to_like(search));
+                sql.push_str(" AND text LIKE ?1 ESCAPE '\\'");
+                args.push(Box::new(pattern));
+            }
+            "regex" => {
+                // REGEXP is a registered scalar function (open_db); an
+                // invalid pattern simply matches nothing.
+                sql.push_str(" AND text REGEXP ?1");
+                args.push(Box::new(format!("(?i){search}")));
+            }
+            _ => {
+                // Escape LIKE wildcards so "100%" or "a_b" match literally.
+                let escaped = search
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                sql.push_str(" AND text LIKE '%' || ? || '%' ESCAPE '\\'");
+                args.push(Box::new(escaped));
+            }
+        }
     }
     if let Some(k) = kind {
         sql.push_str(" AND kind = ?");
@@ -478,7 +553,7 @@ mod tests {
             c.created_at = 100 + i as i64;
             insert_clip(&conn, &c).unwrap();
         }
-        let clips = list_clips(&conn, Some(None), "", None, 100, 0).unwrap();
+        let clips = list_clips(&conn, Some(None), "", "plain", None, 100, 0).unwrap();
         assert_eq!(clips.len(), 3);
         assert_eq!(clips[0].text.as_deref(), Some("three"));
         assert_eq!(clips[2].text.as_deref(), Some("one"));
@@ -499,15 +574,15 @@ mod tests {
         let pinned_id = insert_clip(&conn, &pinned).unwrap();
         set_pinboard(&conn, pinned_id, Some(board_id)).unwrap();
 
-        let history = list_clips(&conn, Some(None), "", None, 100, 0).unwrap();
+        let history = list_clips(&conn, Some(None), "", "plain", None, 100, 0).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].id, free_id);
 
-        let board = list_clips(&conn, Some(Some(board_id)), "", None, 100, 0).unwrap();
+        let board = list_clips(&conn, Some(Some(board_id)), "", "plain", None, 100, 0).unwrap();
         assert_eq!(board.len(), 1);
         assert_eq!(board[0].id, pinned_id);
 
-        let all = list_clips(&conn, None, "", None, 100, 0).unwrap();
+        let all = list_clips(&conn, None, "", "plain", None, 100, 0).unwrap();
         assert_eq!(all.len(), 2);
     }
 
@@ -522,11 +597,11 @@ mod tests {
         b.created_at = 2;
         insert_clip(&conn, &b).unwrap();
 
-        let hits = list_clips(&conn, Some(None), "100%", None, 10, 0).unwrap();
+        let hits = list_clips(&conn, Some(None), "100%", "plain", None, 10, 0).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text.as_deref(), Some("100%_done"));
 
-        let hits = list_clips(&conn, Some(None), "100x", None, 10, 0).unwrap();
+        let hits = list_clips(&conn, Some(None), "100x", "plain", None, 10, 0).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text.as_deref(), Some("100x done"));
     }
@@ -564,13 +639,50 @@ mod tests {
         let removed = clear_history(&conn).unwrap();
         assert_eq!(removed, vec![Some("C:/tmp/a.png".to_string())]);
 
-        let rest = list_clips(&conn, None, "", None, 100, 0).unwrap();
+        let rest = list_clips(&conn, None, "", "plain", None, 100, 0).unwrap();
         assert_eq!(rest.len(), 1);
         assert_eq!(rest[0].id, pinned_id);
     }
 
     /// enforce_limit removes the OLDEST unpinned rows beyond `max`.
     #[test]
+    #[test]
+    fn wildcard_to_like_translates_and_escapes() {
+        assert_eq!(wildcard_to_like("投*仓"), "投%仓");
+        assert_eq!(wildcard_to_like("a?b"), "a_b");
+        assert_eq!(wildcard_to_like("100%"), "100\\%");
+        assert_eq!(wildcard_to_like("a_b\\c"), "a\\_b\\\\c");
+        assert_eq!(wildcard_to_like("plain"), "plain");
+    }
+
+    #[test]
+    fn wildcard_search_matches_glob_semantics() {
+        let conn = test_db();
+        for text in ["投机非日内开仓", "投机日记", "别的"] {
+            let mut c = clip(ClipKind::Text, Some(text), None);
+            insert_clip(&conn, &mut c).unwrap();
+        }
+        let hits = list_clips(&conn, Some(None), "投*仓", "wildcard", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("投机非日内开仓"));
+    }
+
+    #[test]
+    fn regex_search_mode_is_case_insensitive_and_tolerates_invalid_patterns() {
+        let conn = test_db();
+        for text in ["Alpha Note", "beta item"] {
+            let mut c = clip(ClipKind::Text, Some(text), None);
+            insert_clip(&conn, &mut c).unwrap();
+        }
+        let hits = list_clips(&conn, Some(None), "^alpha.*note$", "regex", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("Alpha Note"));
+
+        // An invalid pattern matches nothing instead of erroring the query.
+        let broken = list_clips(&conn, Some(None), "([invalid", "regex", None, 10, 0).unwrap();
+        assert!(broken.is_empty());
+    }
+
     fn prune_expired_keeps_pinned_and_recent() {
         let conn = test_db();
         let now: i64 = 1_700_000_500_000;
@@ -592,7 +704,7 @@ mod tests {
         // Query ALL clips (Some(None) is the unpinned-history view, which by
         // design excludes the pinned survivor).
         let names: Vec<String> =
-            list_clips(&conn, None, "", None, 100, 0)
+            list_clips(&conn, None, "", "plain", None, 100, 0)
                 .unwrap()
                 .into_iter()
                 .map(|c| c.text.unwrap_or_default())

@@ -194,6 +194,20 @@ export default function SettingsApp() {
 
       <section className="settings-section">
         <h2>{t("History")}</h2>
+        <Row
+          label={t("Search syntax")}
+          desc={t("How the search box interprets what you type")}
+        >
+          <select
+            data-testid="search-mode-select"
+            value={settings.searchMode || "plain"}
+            onChange={(e) => update({ searchMode: e.target.value })}
+          >
+            <option value="plain">{t("Plain substring (default)")}</option>
+            <option value="wildcard">{t("Wildcard: * = any text, ? = one character")}</option>
+            <option value="regex">{t("Regular expression (case-insensitive)")}</option>
+          </select>
+        </Row>
         <Row label={t("Keep at most")} desc={t("Oldest unpinned clips are removed beyond this limit")}>
           <select
             value={String(settings.maxClips)}

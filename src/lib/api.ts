@@ -17,6 +17,7 @@ export const api = {
   listClips: (opts: {
     pinboardId?: number | null;
     search?: string;
+    searchMode?: string;
     kind?: ClipKind | null;
     limit?: number;
     offset?: number;
@@ -25,6 +26,7 @@ export const api = {
       // null = plain history (unpinned only); a number = that pinboard.
       pinboardId: opts.pinboardId ?? null,
       search: opts.search ?? "",
+      searchMode: opts.searchMode ?? "plain",
       kind: opts.kind ?? null,
       limit: opts.limit ?? 100,
       offset: opts.offset ?? 0,

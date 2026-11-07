@@ -227,7 +227,7 @@ fn on_clipboard_update() {
             return;
         }
     }
-    if let Ok(newest) = store::list_clips(&db, None, "", None, 1, 0) {
+    if let Ok(newest) = store::list_clips(&db, None, "", "plain", None, 1, 0) {
         if let Some(n) = newest.first() {
             if n.kind == kind && n.text == text && n.files == files_json {
                 if kind == ClipKind::Image {

@@ -2415,6 +2415,7 @@ dependencies = [
  "base64 0.22.1",
  "hex",
  "image",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

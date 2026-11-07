@@ -624,3 +624,74 @@ test("a single search result fills the strip without being clipped", async ({ pa
   expect(geo.allButtonsVisible).toBe(true); // Delete button was cut before
   expect(geo.buttonCount).toBeGreaterThan(0);
 });
+
+test("regex mode plumbing: the query carries searchMode to the backend", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, searchMode: "regex" } });
+  });
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("alpha");
+  await page.waitForTimeout(250);
+  await expect(page.locator(".card")).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "list_clips");
+        return c?.args?.searchMode;
+      }),
+    )
+    .toBe("regex");
+});
+
+test("invalid regex hint shows without breaking the page", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, searchMode: "regex" } });
+  });
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("([invalid");
+  await page.waitForTimeout(250);
+  await expect(page.locator(".search-error")).toBeVisible(); // hint, not a crash
+  await expect(page.locator(".card")).toHaveCount(0); // matches paused
+});
+
+test("wildcard mode plumbing reaches the backend query", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, searchMode: "wildcard" } });
+  });
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("alpha");
+  await page.waitForTimeout(250);
+  await expect(page.locator(".card")).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "list_clips");
+        return c?.args?.searchMode;
+      }),
+    )
+    .toBe("wildcard");
+});
+
+test("search syntax setting persists in the settings page", async ({ page }) => {
+  await openSettings(page);
+  const select = page.locator('[data-testid="search-mode-select"]');
+  await expect(select).toHaveValue("plain");
+  await select.selectOption("wildcard");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "set_settings");
+        return c?.args?.newSettings?.searchMode;
+      }),
+    )
+    .toBe("wildcard");
+});

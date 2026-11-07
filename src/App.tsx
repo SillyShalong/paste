@@ -76,6 +76,25 @@ export default function App() {
         scrollDetail(e.key);
         return;
       }
+      if (
+        (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+        !inSearch &&
+        !detailOpen
+      ) {
+        // Vertical arrows cycle the sidebar views: History, then pinboards
+        // in display order — switching pinboards without the mouse.
+        e.preventDefault();
+        const { pinboards, view } = s;
+        const views: Array<{ type: "history" } | { type: "board"; id: number }> = [
+          { type: "history" },
+          ...pinboards.map((p) => ({ type: "board" as const, id: p.id })),
+        ];
+        const cur =
+          view.type === "board" ? 1 + pinboards.findIndex((p) => p.id === view.id) : 0;
+        const next = (cur + (e.key === "ArrowDown" ? 1 : -1) + views.length) % views.length;
+        s.setView(views[next]);
+        return;
+      }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         if (inSearch) {
           // let the caret move; only navigate when at the edge

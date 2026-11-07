@@ -333,3 +333,59 @@ test("arrow keys continue from the trackpad-scrolled position (no teleport)", as
   expect(Math.abs(after.scrollLeft - before.scrollLeft)).toBeLessThan(500);
   expect(after.scrollLeft).toBeGreaterThan(0);
 });
+
+test("vertical arrows cycle the pinboard views", async ({ page }) => {
+  await page.addInitScript(() => {
+    const backend = window.__ipcState;
+    backend.pinboards.push(
+      { id: 1, name: "Work", position: 0, createdAt: 1700000000000 },
+      { id: 2, name: "Snippets", position: 1, createdAt: 1700000000001 },
+    );
+    backend.clips.push({ ...backend.clips[0], id: 60, pinboardId: 1, text: "pinned work item" });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.__store.getState().clips.length > 0);
+
+  const getView = () => page.evaluate(() => window.__store.getState().view);
+  const chip = () => page.locator(".board-chip");
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+  );
+  await expect(chip()).toHaveText("Work");
+  await expect(await getView()).toMatchObject({ type: "board", id: 1 });
+  await expect(page.locator(".card")).toHaveCount(1); // the pinned clip
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+  );
+  await expect(chip()).toHaveText("Snippets");
+  await expect(page.locator(".card")).toHaveCount(0); // board 2 is empty
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+  );
+  await expect(await getView()).toMatchObject({ type: "history" }); // wrapped around
+  await expect(chip()).toHaveCount(0);
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })),
+  );
+  await expect(chip()).toHaveText("Snippets"); // wrap backwards to the last board
+});
+
+test("vertical arrows are inert while typing in the search box", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__ipcState.pinboards.push({ id: 1, name: "Work", position: 0, createdAt: 1700000000000 });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.__store.getState().clips.length > 0);
+
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.press("ArrowDown");
+  await input.press("ArrowUp");
+  const current = await page.evaluate(() => window.__store.getState().view);
+  expect(current.type).toBe("history");
+  await expect(page.locator(".board-chip")).toHaveCount(0);
+});

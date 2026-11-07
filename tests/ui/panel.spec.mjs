@@ -389,3 +389,51 @@ test("vertical arrows are inert while typing in the search box", async ({ page }
   expect(current.type).toBe("history");
   await expect(page.locator(".board-chip")).toHaveCount(0);
 });
+
+test("pinboards can be renamed inline", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__ipcState.pinboards.push({ id: 1, name: "Work", position: 0, createdAt: 1700000000000 });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.__store.getState().pinboards.length > 0);
+
+  const item = page.locator(".board-item", { hasText: "Work" });
+  await item.hover();
+  await item.locator(".board-del").first().click(); // ✎ rename button
+  const input = page.locator(".board-input");
+  await expect(input).toHaveValue("Work");
+  await input.fill("Work Items");
+  await input.press("Enter");
+
+  await expect(page.locator(".board-name")).toHaveText("Work Items");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = window.__invoked.find((x) => x.cmd === "rename_pinboard");
+        return { id: c?.args.id, name: c?.args.name };
+      }),
+    )
+    .toMatchObject({ id: 1, name: "Work Items" });
+});
+
+test("escape cancels the rename without changes", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__ipcState.pinboards.push({ id: 1, name: "Keep", position: 0, createdAt: 1700000000000 });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.__store.getState().pinboards.length > 0);
+
+  const item = page.locator(".board-item", { hasText: "Keep" });
+  await item.hover();
+  await item.locator(".board-del").first().click();
+  const input = page.locator(".board-input");
+  await expect(input).toHaveValue("Keep");
+  await input.fill("Changed");
+  await input.press("Escape");
+
+  await expect(page.locator(".board-name")).toHaveText("Keep");
+  const renames = await page.evaluate(
+    () => window.__invoked.filter((c) => c.cmd === "rename_pinboard").length,
+  );
+  expect(renames).toBe(0);
+});

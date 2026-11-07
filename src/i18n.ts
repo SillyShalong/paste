@@ -40,6 +40,7 @@ const zh: Record<string, string> = {
   "Pinboard name…": "收藏板名称…",
   "Delete pinboard": "删除收藏板",
   "Delete pinboard — clips return to history": "删除收藏板 —— 内容会回到历史",
+  "Rename pinboard": "重命名收藏板",
   "Settings…": "设置…",
 
   // Panel — cards / actions / context menu

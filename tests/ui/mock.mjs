@@ -81,6 +81,11 @@ export const MOCK_SCRIPT = `
         case "set_settings":
           state.settings = { ...state.settings, ...args.newSettings };
           return Promise.resolve(null);
+        case "rename_pinboard":
+          state.pinboards = state.pinboards.map((b) =>
+            b.id === args.id ? { ...b, name: String(args.name) } : b,
+          );
+          return Promise.resolve(null);
         case "create_pinboard": {
           const board = {
             id: state.pinboards.length + 1,

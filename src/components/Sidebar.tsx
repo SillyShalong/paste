@@ -12,6 +12,7 @@ export default function Sidebar() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [pendingDel, setPendingDel] = useState<number | null>(null);
+  const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
 
   if (!open) return null;
 
@@ -24,6 +25,16 @@ export default function Sidebar() {
     setCreating(false);
   };
 
+  const commitRename = async () => {
+    if (!renaming) return;
+    const name = renaming.name.trim();
+    const original = pinboards.find((p) => p.id === renaming.id)?.name;
+    if (name && name !== original) {
+      await useStore.getState().renamePinboard(renaming.id, name);
+    }
+    setRenaming(null);
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-title">{t("Pinboards")}</div>
@@ -33,14 +44,32 @@ export default function Sidebar() {
       >
         <ClockIcon /> {t("History")}
       </button>
-      {pinboards.map((p) => (
+      {pinboards.map((p) =>
+        renaming?.id === p.id ? (
+          <input
+            key={p.id}
+            className="board-input"
+            autoFocus
+            value={renaming.name}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setRenaming({ id: p.id, name: e.target.value })}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setRenaming(null);
+            }}
+          />
+        ) : (
         <div
           key={p.id}
           className={`board-item ${view.type === "board" && view.id === p.id ? "active" : ""}`}
           onClick={() => setView({ type: "board", id: p.id })}
+          onDoubleClick={() => setRenaming({ id: p.id, name: p.name })}
         >
           <BoardIcon />
-          <span className="board-name">{p.name}</span>
+          <span className="board-name" onDoubleClick={(e) => { e.stopPropagation(); setRenaming({ id: p.id, name: p.name }); }}>
+            {p.name}
+          </span>
           {pendingDel === p.id ? (
             <span className="board-del-confirm" onMouseDown={(e) => e.stopPropagation()}>
               <button
@@ -66,16 +95,28 @@ export default function Sidebar() {
               </button>
             </span>
           ) : (
-            <button
-              className="board-del"
-              title={t("Delete pinboard")}
-              onClick={(e) => {
-                e.stopPropagation();
-                setPendingDel(p.id);
-              }}
-            >
-              ×
-            </button>
+            <>
+              <button
+                className="board-del"
+                title={t("Rename pinboard")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRenaming({ id: p.id, name: p.name });
+                }}
+              >
+                ✎
+              </button>
+              <button
+                className="board-del"
+                title={t("Delete pinboard")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPendingDel(p.id);
+                }}
+              >
+                ×
+              </button>
+            </>
           )}
         </div>
       ))}

@@ -137,6 +137,9 @@ Applied instantly, no restart needed.
   KeePass are skipped by default — Windows and macOS binary names both)
 - One-click **pause** from the tray while screen-sharing
 - Optional history size limit; pinned items survive clears
+- Optional **auto-delete**: keep unpinned history forever (default) or
+  prune after 5/10/30 days, 3 months, or any custom number of days —
+  pinned items and settings survive policy changes
 - Single-instance guard: launching a second copy exits immediately
 
 ## ⌨️ Keyboard shortcuts

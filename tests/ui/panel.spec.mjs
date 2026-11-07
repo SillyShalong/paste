@@ -505,3 +505,85 @@ test("clicking the search input exits navigation mode", async ({ page }) => {
   await expect(page.locator(".card")).toHaveCount(1);
   await expect(input).toBeFocused();
 });
+
+async function openSettings(page) {
+  const { appendFileSync } = await import("node:fs");
+  await page.goto("/#/settings");
+  const h1 = await page.evaluate(() => location.hash);
+  await page.reload();
+  const h2 = await page.evaluate(() => location.hash);
+  appendFileSync("/tmp/pw-hash.log", `after-goto=${JSON.stringify(h1)} after-reload=${JSON.stringify(h2)}\n`);
+  await page.waitForSelector(".settings-root h1");
+}
+
+test("retention presets require confirmation before cleanup", async ({ page }) => {
+  await openSettings(page);
+  const select = page.locator('[data-testid="retention-select"]');
+  await expect(select).toHaveValue("0"); // permanent by default
+
+  // Destructive change: 5 days → needs the confirm strip, no IPC yet
+  await select.selectOption("5");
+  await expect(page.locator('[data-testid="retention-confirm"]')).toBeVisible();
+  let calls = await page.evaluate(
+    () => window.__invoked.filter((c) => c.cmd === "set_settings").length,
+  );
+  expect(calls).toBe(0);
+
+  // Cancel: nothing changes
+  await page.locator('[data-testid="retention-confirm"] .btn', { hasText: "Cancel" }).click();
+  await expect(page.locator('[data-testid="retention-confirm"]')).toHaveCount(0);
+  await expect(select).toHaveValue("0");
+
+  // Apply: set_settings fires with retentionDays = 5
+  await select.selectOption("5");
+  await page.locator('[data-testid="retention-apply"]').click();
+  await expect(page.locator('[data-testid="retention-confirm"]')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "set_settings");
+        return c?.args?.newSettings?.retentionDays;
+      }),
+    )
+    .toBe(5);
+});
+
+test("choosing Forever applies immediately without confirmation", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__ipcState.settings.retentionDays = 10;
+  });
+  await openSettings(page);
+
+  const select = page.locator('[data-testid="retention-select"]');
+  await expect(select).toHaveValue("10");
+  await select.selectOption("0");
+  await expect(page.locator('[data-testid="retention-confirm"]')).toHaveCount(0);
+  await expect(select).toHaveValue("0");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "set_settings");
+        return c?.args?.newSettings?.retentionDays;
+      }),
+    )
+    .toBe(0);
+});
+
+test("custom days flow through the number input", async ({ page }) => {
+  await openSettings(page);
+
+  const select = page.locator('[data-testid="retention-select"]');
+  await select.selectOption("custom");
+  const num = page.locator('[data-testid="retention-custom"]');
+  await expect(num).toBeVisible();
+  await num.fill("45");
+  await page.locator('[data-testid="retention-apply"]').click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const c = [...window.__invoked].reverse().find((x) => x.cmd === "set_settings");
+        return c?.args?.newSettings?.retentionDays;
+      }),
+    )
+    .toBe(45);
+});

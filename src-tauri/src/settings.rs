@@ -19,6 +19,12 @@ pub struct AppSettings {
     /// Max number of clips kept (0 = unlimited, Paste default).
     #[serde(default)]
     pub max_clips: i64,
+    /// Delete unpinned clips older than this many days (0 = keep forever).
+    /// Pinned clips always survive; pruning runs at startup, after every
+    /// capture and whenever settings are saved — idempotent by cutoff, so
+    /// flipping the value back and forth cannot corrupt anything.
+    #[serde(default)]
+    pub retention_days: i64,
     /// Paste as plain text by default (Paste has this option).
     #[serde(default)]
     pub always_plain_text: bool,
@@ -67,6 +73,7 @@ impl Default for AppSettings {
             hotkey: default_hotkey(),
             quick_paste: true,
             max_clips: 0,
+            retention_days: 0,
             always_plain_text: false,
             excluded_apps: default_excluded_apps(),
             paused: false,

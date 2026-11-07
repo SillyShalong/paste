@@ -46,6 +46,36 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Delete unpinned clips older than the retention window and their image
+    /// files. Idempotent: safe to call at startup, after every capture and
+    /// whenever settings change; flipping retention_days back and forth
+    /// cannot corrupt anything. Pinned clips always survive.
+    pub fn prune_retention(&self) -> usize {
+        let days = self.settings.lock().unwrap().retention_days;
+        if days <= 0 {
+            return 0;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let cutoff = now.saturating_sub(days.saturating_mul(86_400_000));
+        match store::prune_expired(&self.db.lock().unwrap(), cutoff) {
+            Ok(victims) => {
+                for (_, img) in &victims {
+                    if let Some(p) = img {
+                        let _ = std::fs::remove_file(p);
+                    }
+                }
+                victims.len()
+            }
+            Err(e) => {
+                eprintln!("[paste] retention prune failed: {e}");
+                0
+            }
+        }
+    }
+
     pub fn new(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let data_dir = app.path().app_data_dir()?;
         std::fs::create_dir_all(&data_dir)?;

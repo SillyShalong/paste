@@ -135,6 +135,18 @@ const zh: Record<string, string> = {
   "1000 clips": "1000 条",
   "5000 clips": "5000 条",
   "Clear all history? Pinned items are kept.": "清空全部历史？置顶项会保留。",
+  "Delete after": "自动删除",
+  "Unpinned clips older than this are deleted (pinned items are kept)":
+    "超过此期限的未置顶内容会被删除（置顶项保留）",
+  "Forever (default)": "永久（默认）",
+  "5 days": "5 天",
+  "10 days": "10 天",
+  "30 days": "30 天",
+  "3 months": "3 个月",
+  "Custom…": "自定义…",
+  "Applying will delete unpinned clips older than {{days}} days now. Pinned items are kept.":
+    "应用后将立即删除 {{days}} 天前的未置顶内容，置顶项保留。",
+  "Apply and clean up": "应用并清理",
   Confirm: "确认",
 
   // Settings — excluded apps

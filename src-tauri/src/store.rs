@@ -316,6 +316,30 @@ pub fn clear_history(conn: &Connection) -> rusqlite::Result<Vec<Option<String>>>
 }
 
 /// Enforce max_clips limit (oldest unpinned first). Returns ids deleted + files to clean.
+/// Delete unpinned clips older than `cutoff_ms`, returning their image
+/// files so the caller can remove them from disk. Pinned clips always
+/// survive — retention must never destroy deliberately kept content.
+pub fn prune_expired(
+    conn: &Connection,
+    cutoff_ms: i64,
+) -> rusqlite::Result<Vec<(i64, Option<String>)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, image_path FROM clips WHERE pinboard_id IS NULL AND created_at < ?1",
+    )?;
+    let victims = stmt
+        .query_map(params![cutoff_ms], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !victims.is_empty() {
+        conn.execute(
+            "DELETE FROM clips WHERE pinboard_id IS NULL AND created_at < ?1",
+            params![cutoff_ms],
+        )?;
+    }
+    Ok(victims)
+}
+
 pub fn enforce_limit(
     conn: &Connection,
     max: i64,
@@ -547,6 +571,37 @@ mod tests {
 
     /// enforce_limit removes the OLDEST unpinned rows beyond `max`.
     #[test]
+    fn prune_expired_keeps_pinned_and_recent() {
+        let conn = test_db();
+        let now: i64 = 1_700_000_500_000;
+        let old = now - 10 * 86_400_000;
+        let fresh = now - 1_000;
+        let mut a = clip(ClipKind::Text, Some("old unpinned"), None);
+        a.created_at = old;
+        let mut b = clip(ClipKind::Text, Some("old pinned"), None);
+        b.created_at = old;
+        b.pinboard_id = Some(1);
+        let mut c = clip(ClipKind::Text, Some("fresh unpinned"), None);
+        c.created_at = fresh;
+        let a_id = insert_clip(&conn, &a).unwrap();
+        insert_clip(&conn, &b).unwrap();
+        insert_clip(&conn, &c).unwrap();
+        let victims = prune_expired(&conn, now - 5 * 86_400_000).unwrap();
+        assert_eq!(victims.len(), 1);
+        assert_eq!(victims[0].0, a_id);
+        // Query ALL clips (Some(None) is the unpinned-history view, which by
+        // design excludes the pinned survivor).
+        let names: Vec<String> =
+            list_clips(&conn, None, "", None, 100, 0)
+                .unwrap()
+                .into_iter()
+                .map(|c| c.text.unwrap_or_default())
+                .collect();
+        assert!(names.contains(&"old pinned".to_string()));
+        assert!(names.contains(&"fresh unpinned".to_string()));
+        assert!(!names.contains(&"old unpinned".to_string()));
+    }
+
     fn enforce_limit_drops_oldest() {
         let conn = test_db();
         for i in 1..=5i64 {

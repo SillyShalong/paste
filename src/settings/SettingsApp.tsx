@@ -17,6 +17,7 @@ export default function SettingsApp() {
   const [recording, setRecording] = useState(false);
   const [newExe, setNewExe] = useState("");
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [retentionDraft, setRetentionDraft] = useState<number | null>(null);
   const [pendingDelBoard, setPendingDelBoard] = useState<number | null>(null);
   const [version, setVersion] = useState<string>("…");
   // macOS only: paste keystroke injection needs the Accessibility permission.
@@ -29,7 +30,9 @@ export default function SettingsApp() {
       setPinboards(d.pinboards);
     });
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
-    api.listTrayIcons().then(setTrayIcons).catch(() => setTrayIcons([]));
+    api.listTrayIcons()
+      .then((v) => setTrayIcons(Array.isArray(v) ? v : []))
+      .catch(() => setTrayIcons([]));
   }, []);
 
   useEffect(() => {
@@ -202,6 +205,75 @@ export default function SettingsApp() {
             <option value="1000">{t("1000 clips")}</option>
             <option value="5000">{t("5000 clips")}</option>
           </select>
+        </Row>
+        <Row
+          label={t("Delete after")}
+          desc={t("Unpinned clips older than this are deleted (pinned items are kept)")}
+        >
+          <div className="retention-row">
+            <select
+              data-testid="retention-select"
+              value={
+                retentionDraft !== null
+                  ? String(retentionDraft)
+                  : [0, 5, 10, 30, 90].includes(settings.retentionDays)
+                    ? String(settings.retentionDays)
+                    : "custom"
+              }
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "custom") {
+                  setRetentionDraft(settings.retentionDays > 0 ? settings.retentionDays : 5);
+                } else if (Number(v) === 0) {
+                  // Choosing to keep forever deletes nothing — apply immediately.
+                  setRetentionDraft(null);
+                  update({ retentionDays: 0 });
+                } else {
+                  setRetentionDraft(Number(v)); // destructive: needs the confirm strip
+                }
+              }}
+            >
+              <option value="0">{t("Forever (default)")}</option>
+              <option value="5">{t("5 days")}</option>
+              <option value="10">{t("10 days")}</option>
+              <option value="30">{t("30 days")}</option>
+              <option value="90">{t("3 months")}</option>
+              <option value="custom">{t("Custom…")}</option>
+            </select>
+            {retentionDraft !== null && (
+              <input
+                data-testid="retention-custom"
+                type="number"
+                min={1}
+                max={3650}
+                value={retentionDraft}
+                onChange={(e) => setRetentionDraft(Number(e.target.value))}
+                style={{ width: 84 }}
+              />
+            )}
+          </div>
+          {retentionDraft !== null && retentionDraft !== settings.retentionDays && (
+            <div className="retention-confirm" data-testid="retention-confirm">
+              <span>
+                {t("Applying will delete unpinned clips older than {{days}} days now. Pinned items are kept.")
+                  .replace("{{days}}", String(retentionDraft))}
+              </span>
+              <button
+                className="btn danger"
+                data-testid="retention-apply"
+                onClick={() => {
+                  const days = Math.max(1, Math.min(3650, Math.round(retentionDraft)));
+                  update({ retentionDays: days });
+                  setRetentionDraft(null);
+                }}
+              >
+                {t("Apply and clean up")}
+              </button>
+              <button className="btn" onClick={() => setRetentionDraft(null)}>
+                {t("Cancel")}
+              </button>
+            </div>
+          )}
         </Row>
         <div className="settings-actions">
           {confirmingClear ? (

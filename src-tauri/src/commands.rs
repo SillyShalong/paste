@@ -220,6 +220,7 @@ pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), Str
     }
 
     settings::save(&state.db.lock().unwrap(), &new_settings);
+    state.prune_retention(); // a shorter window takes effect immediately
     crate::apply_tray_icon(&app, &new_settings.tray_icon);
     crate::refresh_tray(&app); // tray icon + menu labels follow the settings
     // Keep autostart in sync with the toggle.

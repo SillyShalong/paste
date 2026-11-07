@@ -192,6 +192,7 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let state = AppState::new(app.handle())?;
+            state.prune_retention(); // apply the retention window set before this launch
             app.manage(state);
             // Needed before the clipboard listener starts (macOS main-thread
             // dispatch for AppKit work).

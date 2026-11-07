@@ -27,7 +27,7 @@ export const FIXTURE_CLIPS = [
 ];
 
 const SETTINGS = {
-  hotkey: "CmdOrCtrl+Shift+V", quickPaste: false, maxClips: 0,
+  hotkey: "CmdOrCtrl+Shift+V", quickPaste: false, maxClips: 0, retentionDays: 0,
   alwaysPlainText: false, excludedApps: [], paused: false, autostart: false,
   theme: "dark", panelPosition: "center", wheelDirection: "default",
   trayIcon: "classic", language: "en",
@@ -99,6 +99,8 @@ export const MOCK_SCRIPT = `
         case "copy_clip":
         case "paste_clip":
           return Promise.resolve(true);
+        case "list_tray_icons":
+          return Promise.resolve([]);
         case "paste_permission_granted":
           return Promise.resolve(window.__axTrusted ?? false);
         case "plugin:event|listen":

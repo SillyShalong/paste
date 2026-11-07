@@ -300,6 +300,7 @@ fn on_clipboard_update() {
                 }
             }
             drop(db);
+            state.prune_retention(); // keep the retention window current
             let _ = app.emit_to("panel", "clipboard:new", &clip);
         }
         Err(e) => {

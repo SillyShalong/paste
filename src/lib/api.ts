@@ -60,6 +60,8 @@ export const api = {
   togglePause: () => invoke<boolean>("toggle_pause"),
   hidePanel: () => invoke<void>("hide_panel"),
   openSettings: () => invoke<void>("open_settings"),
+  openAccessibilitySettings: () => invoke<void>("open_accessibility_settings"),
+  closeWindow: (label: string) => invoke<void>("close_window", { label }),
   /// macOS Accessibility permission for synthesizing paste keystrokes.
   pastePermissionGranted: () => invoke<boolean>("paste_permission_granted"),
 };

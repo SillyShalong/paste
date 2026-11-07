@@ -94,6 +94,8 @@ export const MOCK_SCRIPT = `
         case "copy_clip":
         case "paste_clip":
           return Promise.resolve(true);
+        case "paste_permission_granted":
+          return Promise.resolve(window.__axTrusted ?? false);
         case "plugin:event|listen":
           window.__eventHandlers = window.__eventHandlers || {};
           (window.__eventHandlers[args.event] ||= []).push(args.handler);

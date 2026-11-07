@@ -303,6 +303,28 @@ pub fn hide_panel(app: AppHandle) {
     }
 }
 
+/// Deep-link the user to the exact Accessibility pane (macOS; used by the
+/// first-run onboarding window's "open System Settings" button).
+#[tauri::command]
+pub fn open_accessibility_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .spawn();
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = ();
+}
+
+/// Close an auxiliary window (e.g. the onboarding guide) from the frontend.
+#[tauri::command]
+pub fn close_window(app: AppHandle, label: String) {
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.close();
+    }
+}
+
 /// Async on purpose: creating a webview window from a sync command runs on
 /// the main thread, and WebView2 initialization then deadlocks the event
 /// loop (window appears but the whole app freezes and can't be closed).

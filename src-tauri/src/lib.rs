@@ -220,6 +220,23 @@ pub fn run() {
                 );
             }
 
+            // First-run guidance: until the Accessibility permission lets us
+            // synthesize Cmd+V, open a guided setup window (deep-links to the
+            // exact settings pane, live-checks the grant). macOS only.
+            #[cfg(target_os = "macos")]
+            if !crate::macos::ax_trusted() {
+                let _ = tauri::WebviewWindowBuilder::new(
+                    app,
+                    "onboarding",
+                    tauri::WebviewUrl::App("index.html#/onboarding".into()),
+                )
+                .title("Paste 设置引导")
+                .inner_size(560.0, 600.0)
+                .resizable(false)
+                .center()
+                .build();
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -229,6 +246,8 @@ pub fn run() {
             commands::list_clips,
             commands::paste_clip,
             commands::copy_clip,
+            commands::open_accessibility_settings,
+            commands::close_window,
             commands::delete_clip,
             commands::toggle_pin,
             commands::clear_history,

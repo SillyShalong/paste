@@ -162,6 +162,29 @@ const zh: Record<string, string> = {
   "Source revision this build was produced from": "本次构建对应的源码版本",
   Platform: "系统平台",
   "Operating system and CPU architecture": "操作系统与 CPU 架构",
+
+  // Onboarding
+  "Welcome to Paste": "欢迎使用 Paste",
+  "Everything you copy, saved locally and one keystroke away.":
+    "你复制的一切都保存在本机，一次按键即可取回。",
+  "Copying is captured automatically": "复制内容自动记录",
+  "Text, links, images, files and colors — no action needed.":
+    "文本、链接、图片、文件和颜色——无需任何操作。",
+  "Allow pasting (Accessibility permission)": "允许粘贴（需要辅助功能权限）",
+  "macOS needs permission before Paste can type into other apps. Open System Settings, find Paste in the list and switch it on.":
+    "macOS 要求授权后 Paste 才能在其他应用中输入。打开系统设置，在列表中找到 Paste 并打开开关。",
+  "Open System Settings": "打开系统设置",
+  "Checking…": "检测中…",
+  "Granted ✓": "已授权 ✓",
+  "Not granted yet": "尚未授权",
+  "Open the panel with Cmd+Shift+V": "用 Cmd+Shift+V 呼出面板",
+  "Or click the Paste icon in the menu bar. Enter pastes, Space previews, Esc closes.":
+    "也可以点击菜单栏的 Paste 图标。Enter 粘贴，Space 预览，Esc 关闭。",
+  "Granted ✓ — start using Paste": "已授权 ✓ — 开始使用 Paste",
+  "You're all set. Press Cmd+Shift+V anywhere and pick a card.":
+    "一切就绪。在任何地方按 Cmd+Shift+V，选一张卡片即可粘贴。",
+  Finish: "完成",
+  "I'll do this later": "稍后再说",
 };
 
 export function resolveLang(pref: string | undefined): Lang {

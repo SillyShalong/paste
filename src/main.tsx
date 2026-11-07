@@ -1,10 +1,12 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import SettingsApp from "./settings/SettingsApp";
+import OnboardingApp from "./onboarding/OnboardingApp";
 import { useStore } from "./store/useStore";
 import "./styles.css";
 
 const isSettings = window.location.hash.startsWith("#/settings");
+const isOnboarding = window.location.hash.startsWith("#/onboarding");
 
 // Suppress the WebView2 browser context menu (refresh / save-as / print are
 // useless in a clipboard panel). Our own menus (e.g. the card context menu)
@@ -19,5 +21,5 @@ if (import.meta.env.DEV) {
 }
 
 createRoot(document.getElementById("root")!).render(
-  isSettings ? <SettingsApp /> : <App />,
+  isOnboarding ? <OnboardingApp /> : isSettings ? <SettingsApp /> : <App />,
 );

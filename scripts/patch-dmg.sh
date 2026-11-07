@@ -23,6 +23,14 @@ hdiutil attach "$RW" -readwrite -nobrowse -mountpoint "$MNT"
 
 cp "$GUIDE" "$MNT/! 请先阅读 - 安装指南.txt"
 
+# Re-sign the app INSIDE the dmg with the identifier-based requirement.
+# Without this the dmg ships the bundler's ad-hoc (cdhash-bound) signature,
+# and the TCC accessibility grant dies on every update. codesign is
+# available on CI runners.
+codesign --force --sign - \
+  --requirements '=designated => identifier "com.pasteclone.app"' \
+  "$MNT/Paste.app"
+
 hdiutil detach "$MNT"
 
 # hdiutil convert refuses to overwrite an existing -o target; write to a

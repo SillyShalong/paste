@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { api } from "../lib/api";
-import { isMac, modLabel } from "../lib/platform";
+import { isMac, modLabel, osName } from "../lib/platform";
 import { useT } from "../i18n";
 import type { Pinboard, Settings } from "../types";
 
@@ -347,9 +347,10 @@ export default function SettingsApp() {
         </Row>
         <Row label={t("Platform")} desc={t("Operating system and CPU architecture")}>
           <span className="about-value">
-            {import.meta.env.TAURI_ENV_OS || "windows"}{" "}
-            {import.meta.env.TAURI_ENV_PLATFORM_VERSION || ""} ·{" "}
-            {import.meta.env.TAURI_ENV_ARCH || "x86_64"}
+            {/* OS from the runtime navigator — TAURI_ENV_* are build-time and
+                may be missing when the frontend is built without the CLI. */}
+            {osName} {import.meta.env.TAURI_ENV_PLATFORM_VERSION || ""} ·{" "}
+            {import.meta.env.TAURI_ENV_ARCH || (isMac ? "aarch64" : "x86_64")}
           </span>
         </Row>
       </section>

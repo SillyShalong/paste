@@ -3,13 +3,16 @@ import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 
 function gitSha(): string {
-  try {
-    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
-      .toString()
-      .trim();
-  } catch {
-    return "unknown";
+  // Try PATH's git first, then Apple's — a stale /usr/local/bin/git that
+  // fails to exec (status 126) must not blank the About-panel commit.
+  for (const cmd of ["git rev-parse --short HEAD", "/usr/bin/git rev-parse --short HEAD"]) {
+    try {
+      return execSync(cmd, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    } catch {
+      /* try the next candidate */
+    }
   }
+  return "unknown";
 }
 
 // https://vitejs.dev/config/

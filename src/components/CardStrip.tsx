@@ -1,7 +1,7 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "../store/useStore";
 import { osName } from "../lib/platform";
-import { cancelCardScrollAnimation } from "../lib/cardScroll";
+import { cancelCardScrollAnimation, isProgrammaticScroll } from "../lib/cardScroll";
 import ClipboardCard from "./ClipboardCard";
 import { useT } from "../i18n";
 
@@ -10,8 +10,49 @@ export default function CardStrip() {
   const sel = useStore((s) => s.sel);
   const query = useStore((s) => s.query);
   const wheelDirection = useStore((s) => s.settings?.wheelDirection || "default");
-  // Cancel handle for the keyboard scroll animation (set on .cards-row).
-  const rowRef = useRef<HTMLDivElement>(null);
+  // Cancel handle for the keyboard scroll animation + scroll-listener
+  // detach (set on .cards-row).
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const detachScroll = useRef<(() => void) | null>(null);
+
+  // Trackpad/native scrolling must move the keyboard selection WITH the
+  // viewport: without this, pressing → after a swipe teleports the strip
+  // back to wherever the stale selection was. The card nearest the left
+  // edge of the viewport becomes the selected one.
+  const syncSelectionToView = () => {
+    if (isProgrammaticScroll()) return; // keyboard animation owns the scroll
+    const row = rowRef.current;
+    if (!row) return;
+    let best = 0;
+    let bestDist = Infinity;
+    row.querySelectorAll<HTMLElement>("[data-card-index]").forEach((c) => {
+      const d = Math.abs(c.offsetLeft - row.scrollLeft);
+      if (d < bestDist) {
+        bestDist = d;
+        best = Number(c.dataset.cardIndex);
+      }
+    });
+    if (useStore.getState().sel !== best) useStore.setState({ sel: best });
+  };
+
+  // Ref callback: the row mounts only once the first clip arrives, and can
+  // unmount/remount on filter changes — (re)attach the listener each time.
+  const attachRow = (el: HTMLDivElement | null) => {
+    detachScroll.current?.();
+    detachScroll.current = null;
+    rowRef.current = el;
+    if (el) {
+      const onScroll = () => {
+        if (isProgrammaticScroll()) return; // keyboard animation owns it
+        cancelCardScrollAnimation(); // user took over — stop the animation
+        syncSelectionToView();
+      };
+      el.addEventListener("scroll", onScroll, { passive: true });
+      detachScroll.current = () => el.removeEventListener("scroll", onScroll);
+    }
+  };
+
+  useEffect(() => () => detachScroll.current?.(), []);
 
   if (clips.length === 0) {
     return (
@@ -24,13 +65,14 @@ export default function CardStrip() {
   return (
     <div className="card-strip">
       <div
-        ref={rowRef}
+        ref={attachRow}
         className="cards-row"
         onWheel={(e) => {
           // User took over scrolling — stop the keyboard scroll animation,
           // otherwise it drags scrollLeft back toward the selected card and
           // the strip jitters instead of scrolling (trackpad pans also fire
-          // wheel events on macOS, covering momentum here).
+          // wheel events on macOS, covering momentum here). The resulting
+          // scroll event re-syncs the selection to the visible card.
           cancelCardScrollAnimation();
           // vertical wheel scrolls the horizontal history strip; trackpad
           // horizontal swipes (deltaX) pass through natively

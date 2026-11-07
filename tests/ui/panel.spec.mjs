@@ -291,3 +291,45 @@ test("user scroll cancels the keyboard scroll animation (no jitter)", async ({ p
   expect(s2).toBe(s1); // and it stays put
   expect(during).toBeGreaterThanOrEqual(0);
 });
+
+test("arrow keys continue from the trackpad-scrolled position (no teleport)", async ({ page }) => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    ...FIXTURE_CLIPS[0], id: 300 + i, text: `scroll clip ${i}`,
+  }));
+  await page.evaluate((clips) => window.__store.setState({ clips }), many);
+  await page.waitForTimeout(100);
+
+  // Trackpad: scroll right ~1200px in two swipes
+  for (const dy of [600, 600]) {
+    await page.evaluate((delta) => {
+      document
+        .querySelector(".cards-row")
+        ?.dispatchEvent(new WheelEvent("wheel", { deltaY: delta, bubbles: true }));
+    }, dy);
+    await page.waitForTimeout(120);
+  }
+  const before = await page.evaluate(() => ({
+    scrollLeft: Math.round(document.querySelector(".cards-row")?.scrollLeft ?? -1),
+    sel: window.__store.getState().sel,
+  }));
+  expect(before.sel).toBeGreaterThan(0); // selection followed the viewport
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  await page.waitForTimeout(450);
+  const after = await page.evaluate(() => ({
+    scrollLeft: Math.round(document.querySelector(".cards-row")?.scrollLeft ?? -1),
+    sel: window.__store.getState().sel,
+    maxScroll: document.querySelector(".cards-row")
+      ? document.querySelector(".cards-row").scrollWidth -
+        document.querySelector(".cards-row").clientWidth
+      : -1,
+  }));
+
+  // Selection advanced by exactly one from the viewport-synced position
+  expect(after.sel).toBe(before.sel + 1);
+  // The strip moved only a card-width or so — NOT teleported to an end
+  expect(Math.abs(after.scrollLeft - before.scrollLeft)).toBeLessThan(500);
+  expect(after.scrollLeft).toBeGreaterThan(0);
+});

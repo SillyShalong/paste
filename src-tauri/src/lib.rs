@@ -225,7 +225,9 @@ pub fn run() {
             // exact settings pane, live-checks the grant). macOS only.
             #[cfg(target_os = "macos")]
             if !crate::macos::ax_trusted() {
-                let _ = tauri::WebviewWindowBuilder::new(
+                // Same accessory-app caveat: focus the onboarding window so
+                // it opens in front instead of behind the active app.
+                if let Ok(onboarding) = tauri::WebviewWindowBuilder::new(
                     app,
                     "onboarding",
                     tauri::WebviewUrl::App("index.html#/onboarding".into()),
@@ -234,7 +236,10 @@ pub fn run() {
                 .inner_size(560.0, 600.0)
                 .resizable(false)
                 .center()
-                .build();
+                .build()
+                {
+                    let _ = onboarding.set_focus();
+                }
             }
 
             Ok(())
@@ -846,7 +851,11 @@ pub fn open_settings_window(app: &AppHandle) -> tauri::Result<()> {
         win.set_focus()?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(
+    // Newly created windows of an accessory (menu-bar) app do not come to
+    // the front on their own — without an explicit focus call the settings
+    // window would open BEHIND the frontmost app until the user clicks
+    // Settings a second time.
+    let win = WebviewWindowBuilder::new(
         app,
         "settings",
         WebviewUrl::App("index.html#/settings".into()),
@@ -858,5 +867,6 @@ pub fn open_settings_window(app: &AppHandle) -> tauri::Result<()> {
     .maximizable(false)
     .center()
     .build()?;
+    win.set_focus()?;
     Ok(())
 }

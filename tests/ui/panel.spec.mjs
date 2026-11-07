@@ -587,3 +587,40 @@ test("custom days flow through the number input", async ({ page }) => {
     )
     .toBe(45);
 });
+
+test("a single search result fills the strip without being clipped", async ({ page }) => {
+  await page.setViewportSize({ width: 1215, height: 838 });
+  await page.evaluate(() => {
+    window.__store.setState({
+      clips: [
+        {
+          id: 7, kind: "text", text: "投机非日内开仓", html: null, imagePath: null,
+          files: null, sourceName: "Chrome", sourcePath: "", sourceColor: "#cc4444",
+          sourceIcon: "", pinboardId: null, createdAt: Date.now(), pasteCount: 0,
+        },
+      ],
+      query: "投机",
+    });
+  });
+  await page.waitForTimeout(150);
+  const geo = await page.evaluate(() => {
+    const strip = document.querySelector(".card-strip");
+    const row = document.querySelector(".cards-row");
+    const card = document.querySelector(".card");
+    const buttons = [...(card?.querySelectorAll(".card-actions button") ?? [])];
+    const rowRight = row?.getBoundingClientRect().right ?? 0;
+    return {
+      rowFillsStrip:
+        Math.abs(row.clientWidth - strip.clientWidth) < 2,
+      cardRightWithinRow: card ? card.getBoundingClientRect().right <= rowRight + 1 : false,
+      allButtonsVisible: buttons.every(
+        (b) => b.getBoundingClientRect().right <= rowRight + 1,
+      ),
+      buttonCount: buttons.length,
+    };
+  });
+  expect(geo.rowFillsStrip).toBe(true);
+  expect(geo.cardRightWithinRow).toBe(true);
+  expect(geo.allButtonsVisible).toBe(true); // Delete button was cut before
+  expect(geo.buttonCount).toBeGreaterThan(0);
+});

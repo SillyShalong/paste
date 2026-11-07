@@ -458,6 +458,12 @@ html, body, #root {
 .cards-row {
   position: relative;
   display: flex;
+  /* Fill the strip: as a plain flex child the row shrank to its content
+     width, and a single search result got clipped mid-card. min-width:0
+     keeps long histories scrolling inside the strip instead of stretching
+     it. */
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 12px;
   padding: 16px 20px 10px;
   overflow-x: auto;

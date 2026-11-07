@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import { useStore } from "../store/useStore";
 import { osName } from "../lib/platform";
+import { cancelCardScrollAnimation } from "../lib/cardScroll";
 import ClipboardCard from "./ClipboardCard";
 import { useT } from "../i18n";
 
@@ -8,6 +10,8 @@ export default function CardStrip() {
   const sel = useStore((s) => s.sel);
   const query = useStore((s) => s.query);
   const wheelDirection = useStore((s) => s.settings?.wheelDirection || "default");
+  // Cancel handle for the keyboard scroll animation (set on .cards-row).
+  const rowRef = useRef<HTMLDivElement>(null);
 
   if (clips.length === 0) {
     return (
@@ -20,8 +24,14 @@ export default function CardStrip() {
   return (
     <div className="card-strip">
       <div
+        ref={rowRef}
         className="cards-row"
         onWheel={(e) => {
+          // User took over scrolling — stop the keyboard scroll animation,
+          // otherwise it drags scrollLeft back toward the selected card and
+          // the strip jitters instead of scrolling (trackpad pans also fire
+          // wheel events on macOS, covering momentum here).
+          cancelCardScrollAnimation();
           // vertical wheel scrolls the horizontal history strip; trackpad
           // horizontal swipes (deltaX) pass through natively
           const el = e.currentTarget;

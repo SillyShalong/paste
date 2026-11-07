@@ -252,3 +252,42 @@ test("Copy Again shows the copied toast", async ({ page }) => {
   await page.getByText("Copy Again").click();
   await expect(page.locator(".toast")).toContainText("Copied to clipboard");
 });
+
+test("user scroll cancels the keyboard scroll animation (no jitter)", async ({ page }) => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    ...FIXTURE_CLIPS[0], id: 200 + i, text: `bulk clip ${i}`,
+  }));
+  await page.evaluate((clips) => window.__store.setState({ clips }), many);
+
+  // Keyboard-navigate to the far end — starts the scroll animation toward it.
+  for (let i = 0; i < 11; i++) {
+    await page.evaluate(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+    );
+  }
+  await page.waitForTimeout(120); // let the animation spin up toward the target
+  const during = await page.evaluate(
+    () => document.querySelector(".cards-row")?.scrollLeft ?? -1,
+  );
+
+  // User scrolls LEFT against the animation (trackpad swipe direction).
+  await page.evaluate(() => {
+    document
+      .querySelector(".cards-row")
+      ?.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
+  });
+  await page.waitForTimeout(700); // old code: animation pulls scrollLeft back right here
+  const s1 = await page.evaluate(
+    () => document.querySelector(".cards-row")?.scrollLeft ?? -1,
+  );
+  await page.waitForTimeout(400);
+  const s2 = await page.evaluate(
+    () => document.querySelector(".cards-row")?.scrollLeft ?? -1,
+  );
+  // The animation must be canceled: scrollLeft is frozen where the user's
+  // swipe left it (single wheel delta = -600 applied once) — no drift back
+  // toward the selected card at the far end.
+  expect(s1).toBeLessThan(during + 50); // the swipe moved it left
+  expect(s2).toBe(s1); // and it stays put
+  expect(during).toBeGreaterThanOrEqual(0);
+});

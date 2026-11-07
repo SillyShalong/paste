@@ -29,6 +29,8 @@ interface StoreState {
   toggleSidebar: () => void;
   openDetail: () => void;
   closeDetail: () => void;
+  navMode: boolean;
+  setNavMode: (v: boolean) => void;
   paste: (plain?: boolean) => Promise<void>;
   copyAgain: (id?: number) => Promise<void>;
   deleteClip: (id?: number) => Promise<void>;
@@ -45,6 +47,8 @@ let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useStore = create<StoreState>((set, get) => ({
+  navMode: false,
+  setNavMode: (v) => set({ navMode: v }),
   clips: [],
   pinboards: [],
   settings: null,

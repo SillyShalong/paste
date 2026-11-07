@@ -437,3 +437,71 @@ test("escape cancels the rename without changes", async ({ page }) => {
   );
   expect(renames).toBe(0);
 });
+
+test("after arrow navigation, typing does not hijack into search", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.waitForTimeout(100);
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "a", bubbles: true }),
+    );
+  });
+  await page.waitForTimeout(150);
+
+  const active = await page.evaluate(() => document.activeElement?.className ?? "");
+  expect(active).not.toContain("search-input"); // no focus hijack
+
+  // Space previews the selected card instead of typing into search
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  await expect(page.locator(".detail-overlay")).toHaveCount(0);
+});
+
+test("typing still jumps into search before any navigation", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+  });
+  await page.waitForTimeout(150);
+  const focused = await page.evaluate(
+    () => document.activeElement?.classList.contains("search-input") ?? false,
+  );
+  expect(focused).toBe(true);
+});
+
+test("slash focuses the search box after navigation", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true }));
+  });
+  await page.waitForTimeout(150);
+  const focused = await page.evaluate(
+    () => document.activeElement?.classList.contains("search-input") ?? false,
+  );
+  expect(focused).toBe(true);
+});
+
+test("clicking the search input exits navigation mode", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("alpha");
+  await expect(page.locator(".card")).toHaveCount(1);
+  await expect(input).toBeFocused();
+});

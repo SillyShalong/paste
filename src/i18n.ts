@@ -173,7 +173,11 @@ const zh: Record<string, string> = {
   "Allow pasting (Accessibility permission)": "允许粘贴（需要辅助功能权限）",
   "macOS needs permission before Paste can type into other apps. Open System Settings, find Paste in the list and switch it on.":
     "macOS 要求授权后 Paste 才能在其他应用中输入。打开系统设置，在列表中找到 Paste 并打开开关。",
+  "macOS needs permission before Paste can type into other apps. Tap the button — Paste is added to the Accessibility list automatically; switch it on there.":
+    "macOS 要求授权后 Paste 才能在其他应用中输入。点击下方按钮——Paste 会自动加入辅助功能列表，在那里打开开关即可。",
   "Open System Settings": "打开系统设置",
+  "Request Accessibility Permission": "请求辅助功能授权",
+  "Request permission": "请求授权",
   "Checking…": "检测中…",
   "Granted ✓": "已授权 ✓",
   "Not granted yet": "尚未授权",

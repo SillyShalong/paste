@@ -247,6 +247,7 @@ pub fn run() {
             commands::paste_clip,
             commands::copy_clip,
             commands::open_accessibility_settings,
+            commands::request_accessibility_permission,
             commands::close_window,
             commands::delete_clip,
             commands::toggle_pin,

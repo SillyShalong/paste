@@ -345,6 +345,20 @@ pub fn quick_paste_index(app: &AppHandle, index: i64) {
 
 /// Whether the OS lets us synthesize paste keystrokes. macOS gates Cmd+V
 /// injection behind the Accessibility permission; other platforms: always.
+/// Show the system Accessibility prompt (adds Paste to the list) and
+/// return the current trust state.
+#[tauri::command]
+pub fn request_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::request_accessibility_prompt()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 #[tauri::command]
 pub fn paste_permission_granted() -> bool {
     #[cfg(target_os = "macos")]

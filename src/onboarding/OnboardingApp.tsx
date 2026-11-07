@@ -53,10 +53,16 @@ export default function OnboardingApp() {
         2,
         t("Allow pasting (Accessibility permission)"),
         t(
-          "macOS needs permission before Paste can type into other apps. Open System Settings, find Paste in the list and switch it on.",
+          "macOS needs permission before Paste can type into other apps. Tap the button — Paste is added to the Accessibility list automatically; switch it on there.",
         ),
         <div className="onb-actions">
-          <button className="onb-btn primary" onClick={() => api.openAccessibilitySettings()}>
+          <button
+            className="onb-btn primary"
+            onClick={() => api.requestAccessibilityPermission()}
+          >
+            {t("Request Accessibility Permission")}
+          </button>
+          <button className="onb-btn" onClick={() => api.openAccessibilitySettings()}>
             {t("Open System Settings")}
           </button>
           <span className={`onb-badge ${granted ? "ok" : granted === false ? "pending" : ""}`}>

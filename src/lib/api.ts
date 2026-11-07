@@ -61,6 +61,8 @@ export const api = {
   hidePanel: () => invoke<void>("hide_panel"),
   openSettings: () => invoke<void>("open_settings"),
   openAccessibilitySettings: () => invoke<void>("open_accessibility_settings"),
+  /// Show the system prompt that adds Paste to the Accessibility list.
+  requestAccessibilityPermission: () => invoke<boolean>("request_accessibility_permission"),
   closeWindow: (label: string) => invoke<void>("close_window", { label }),
   /// macOS Accessibility permission for synthesizing paste keystrokes.
   pastePermissionGranted: () => invoke<boolean>("paste_permission_granted"),

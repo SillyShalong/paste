@@ -64,6 +64,9 @@ export default function SettingsApp() {
             System Settings → Privacy &amp; Security → Accessibility, then
             restart the app.
           </span>
+          <button onClick={() => api.requestAccessibilityPermission().then(() => api.pastePermissionGranted()).then(setPasteAllowed)}>
+            Request permission
+          </button>
           <button onClick={() => api.pastePermissionGranted().then(setPasteAllowed)}>
             Re-check
           </button>

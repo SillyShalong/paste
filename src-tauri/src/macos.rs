@@ -462,3 +462,46 @@ pub fn post_cmd_v() -> bool {
 pub fn ax_trusted() -> bool {
     unsafe { AXIsProcessTrusted() != 0 }
 }
+
+// kAXTrustedOptionCheckAccessibilityPrompt — passing it as true makes the
+// system show its own "Paste wants to use Accessibility" prompt and add the
+// app to the Accessibility list (grayed until toggled).
+const K_AX_TRUSTED_CHECK_PROMPT: &str = "AXTrustedCheckAccessibilityPrompt";
+
+#[link(name = "ApplicationServices", kind = "framework")]
+extern "C" {
+    fn AXIsProcessTrustedWithOptions(options: *const AnyObject) -> i32;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    static kCFBooleanTrue: *const AnyObject;
+    fn CFDictionaryCreate(
+        allocator: *const AnyObject,
+        keys: *const *const AnyObject,
+        values: *const *const AnyObject,
+        num_values: isize,
+        key_callbacks: *const AnyObject,
+        value_callbacks: *const AnyObject,
+    ) -> *const AnyObject;
+}
+
+/// Trigger the system Accessibility prompt (adds Paste to the list) and
+/// return the current trust state. Safe to call repeatedly — the system
+/// prompt only appears while the permission is missing.
+pub fn request_accessibility_prompt() -> bool {
+    with_pool(|| unsafe {
+        let key = ns_string(K_AX_TRUSTED_CHECK_PROMPT);
+        let keys = [key];
+        let values = [kCFBooleanTrue];
+        let options = CFDictionaryCreate(
+            null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            null(),
+            null(),
+        );
+        AXIsProcessTrustedWithOptions(options) != 0
+    })
+}

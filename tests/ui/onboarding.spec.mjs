@@ -21,6 +21,20 @@ test("onboarding renders steps and flips to granted live", async ({ page }) => {
   await expect(page.locator(".onb-final")).toContainText("Cmd+Shift+V");
 });
 
+test("request button triggers the system Accessibility prompt", async ({ page }) => {
+  await page.addInitScript(MOCK_SCRIPT + "; window.__axTrusted = false;");
+  await page.goto("/#/onboarding");
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "Request Accessibility Permission" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__invoked.some((c) => c.cmd === "request_accessibility_permission"),
+      ),
+    )
+    .toBe(true);
+});
+
 test("onboarding finish closes the window through the IPC bridge", async ({ page }) => {
   await page.addInitScript(MOCK_SCRIPT + "; window.__axTrusted = true;");
   await page.goto("/#/onboarding");

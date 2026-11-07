@@ -438,7 +438,7 @@ test("escape cancels the rename without changes", async ({ page }) => {
   expect(renames).toBe(0);
 });
 
-test("after arrow navigation, typing does not hijack into search", async ({ page }) => {
+test("typing always jumps into search, even after arrow navigation", async ({ page }) => {
   await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
   await page.waitForTimeout(100);
 
@@ -446,20 +446,24 @@ test("after arrow navigation, typing does not hijack into search", async ({ page
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
   );
   await page.evaluate(() => {
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "a", bubbles: true }),
-    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
   });
   await page.waitForTimeout(150);
 
   const active = await page.evaluate(() => document.activeElement?.className ?? "");
-  expect(active).not.toContain("search-input"); // no focus hijack
+  expect(active).toContain("search-input"); // typing focuses search
+  // The synthetic keydown cannot insert text itself — real keystrokes land
+  // in the newly focused box (standard type-to-search behavior).
+});
 
-  // Space previews the selected card instead of typing into search
+test("space with a selected card previews instead of typing", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.waitForTimeout(100);
   await page.evaluate(() =>
     window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })),
   );
-  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await expect(page.locator(".detail-overlay")).toBeVisible(); // preview, not a space
+  await expect(page.locator(".search-input")).toHaveValue(""); // box untouched
   await page.evaluate(() =>
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
@@ -494,11 +498,7 @@ test("slash focuses the search box after navigation", async ({ page }) => {
   expect(focused).toBe(true);
 });
 
-test("clicking the search input exits navigation mode", async ({ page }) => {
-  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
-  await page.evaluate(() =>
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
-  );
+test("clicking the search input allows normal typing", async ({ page }) => {
   const input = page.locator(".search-input");
   await input.click();
   await input.pressSequentially("alpha");

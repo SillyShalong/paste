@@ -45,7 +45,6 @@ export default function CardStrip() {
       const onScroll = () => {
         if (isProgrammaticScroll()) return; // keyboard animation owns it
         cancelCardScrollAnimation(); // user took over — stop the animation
-        useStore.setState({ navMode: true }); // keys now drive the cards
         syncSelectionToView();
       };
       el.addEventListener("scroll", onScroll, { passive: true });
@@ -75,7 +74,6 @@ export default function CardStrip() {
           // wheel events on macOS, covering momentum here). The resulting
           // scroll event re-syncs the selection to the visible card.
           cancelCardScrollAnimation();
-          useStore.setState({ navMode: true }); // keys now drive the cards
           // vertical wheel scrolls the horizontal history strip; trackpad
           // horizontal swipes (deltaX) pass through natively
           const el = e.currentTarget;

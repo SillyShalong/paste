@@ -108,7 +108,6 @@ export default function App() {
         }
         e.preventDefault();
         const sel = s.moveSel(e.key === "ArrowLeft" ? -1 : 1);
-        useStore.setState({ navMode: true });
         if (detailOpen) {
           // keep the preview in sync while browsing cards
           const clip = store.getState().clips[sel];
@@ -148,24 +147,14 @@ export default function App() {
       if (e.key === "/" && !inSearch && !onOtherInput) {
         // explicit: focus the search box ("/" is the conventional shortcut)
         e.preventDefault();
-        useStore.setState({ navMode: false });
         document.querySelector<HTMLInputElement>(".search-input")?.focus();
         return;
       }
-      // Single characters fall into search ONLY in search mode. After
-      // arrows/wheel selected a card (navMode), letters and Space belong to
-      // the cards — typing must not hijack focus into the search box.
-      if (
-        !s.navMode &&
-        !inSearch &&
-        !onOtherInput &&
-        e.key.length === 1 &&
-        !mod &&
-        !e.altKey
-      ) {
-        // start typing anywhere → close the preview and jump into search
+      // Start typing anywhere (including right after arrow/wheel
+      // navigation) → close the preview and jump into search. Space is
+      // handled above: with a card selected it toggles the preview instead.
+      if (!inSearch && !onOtherInput && e.key.length === 1 && !mod && !e.altKey) {
         if (detailOpen) s.closeDetail();
-        useStore.setState({ navMode: false });
         document.querySelector<HTMLInputElement>(".search-input")?.focus();
       }
     };

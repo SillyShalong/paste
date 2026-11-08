@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { api } from "../lib/api";
+import { api, events } from "../lib/api";
+import { useStore } from "../store/useStore";
 import { isMac, modLabel, osName } from "../lib/platform";
 import { useT } from "../i18n";
 import type { Pinboard, Settings } from "../types";
@@ -28,6 +29,14 @@ export default function SettingsApp() {
     api.getInitial().then((d) => {
       setSettings(d.settings);
       setPinboards(d.pinboards);
+      // useT() reads the zustand store, not this local state — keep it in
+      // sync so the saved language actually translates this window.
+      useStore.setState({ settings: d.settings });
+    });
+    // Changes made in other windows keep this one in sync.
+    void events.onSettingsChanged((d) => {
+      setSettings(d);
+      useStore.setState({ settings: d });
     });
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
     api.listTrayIcons()
@@ -44,6 +53,7 @@ export default function SettingsApp() {
     const prev = settings;
     const next = { ...settings, ...patch };
     setSettings(next);
+    useStore.setState({ settings: next }); // t() re-renders right away
     try {
       await api.setSettings(next);
     } catch (e) {

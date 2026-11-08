@@ -730,3 +730,25 @@ test("escape in a filled search box clears it and returns to navigation", async 
   await expect(page.locator(".detail-overlay")).toBeVisible();
   await expect(input).toHaveValue(""); // never typed into the box
 });
+
+test("settings window language switch translates the settings page", async ({ page }) => {
+  await openSettings(page);
+  await expect(page.locator("h1")).toContainText("Paste Settings"); // en default
+
+  const langSelect = page.locator(".settings-root select").first();
+  await langSelect.selectOption("zh");
+  await expect(page.locator("h1")).toContainText("设置"); // translated
+});
+
+test("panel language switch translates the search placeholder", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  await page.evaluate(() => {
+    const s = window.__store.getState().settings;
+    window.__store.setState({ settings: { ...s, language: "zh" } });
+  });
+  await page.waitForTimeout(150);
+  await expect(page.locator(".search-input")).toHaveAttribute(
+    "placeholder",
+    "搜索剪贴板历史…",
+  );
+});

@@ -507,12 +507,11 @@ test("clicking the search input allows normal typing", async ({ page }) => {
 });
 
 async function openSettings(page) {
-  const { appendFileSync } = await import("node:fs");
+  // goto with only a fragment change is a same-document navigation — the
+  // panel keeps rendering; force a real reload so main.tsx re-checks the
+  // route hash and mounts the Settings window.
   await page.goto("/#/settings");
-  const h1 = await page.evaluate(() => location.hash);
   await page.reload();
-  const h2 = await page.evaluate(() => location.hash);
-  appendFileSync("/tmp/pw-hash.log", `after-goto=${JSON.stringify(h1)} after-reload=${JSON.stringify(h2)}\n`);
   await page.waitForSelector(".settings-root h1");
 }
 

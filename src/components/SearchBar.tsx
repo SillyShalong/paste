@@ -50,6 +50,28 @@ export default function SearchBar() {
           placeholder={t("Search clipboard history…")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // Space semantics depend on the box state: an EMPTY box hands
+            // Space to the panel (toggle the preview — a space in an empty
+            // query is worthless), a filled box keeps Space as a query
+            // character for multi-word searches. Escape clears the query
+            // and returns to card navigation (second Esc hides the panel).
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === " " && query === "") {
+              e.preventDefault();
+              e.stopPropagation();
+              const s = useStore.getState();
+              if (s.detailClipId != null) s.closeDetail();
+              else s.openDetail();
+              return;
+            }
+            if (e.key === "Escape" && query !== "") {
+              e.preventDefault();
+              e.stopPropagation();
+              setQuery("");
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
           spellCheck={false}
         />
         <button className="icon-btn" title={paused ? t("Resume history") : t("Pause history")} onClick={() => api.togglePause()}>

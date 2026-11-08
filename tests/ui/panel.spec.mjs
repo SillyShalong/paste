@@ -695,3 +695,39 @@ test("search syntax setting persists in the settings page", async ({ page }) => 
     )
     .toBe("wildcard");
 });
+
+test("space in an EMPTY search box toggles the preview", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  const input = page.locator(".search-input");
+  await input.click(); // focus the empty box
+  await input.press("Space");
+  await expect(page.locator(".detail-overlay")).toBeVisible(); // preview, not a space
+  await expect(input).toHaveValue(""); // box untouched
+  await input.press("Space");
+  await expect(page.locator(".detail-overlay")).toHaveCount(0); // toggles back
+});
+
+test("space in a FILLED search box types a character", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("alpha");
+  await input.press("Space");
+  await expect(page.locator(".detail-overlay")).toHaveCount(0); // no preview hijack
+  await expect(input).toHaveValue("alpha ");
+});
+
+test("escape in a filled search box clears it and returns to navigation", async ({ page }) => {
+  await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
+  const input = page.locator(".search-input");
+  await input.click();
+  await input.pressSequentially("alpha ");
+  await input.press("Escape");
+  await expect(input).toHaveValue(""); // query cleared
+  await expect(input).not.toBeFocused(); // search mode exited
+
+  // Back in navigation mode: space toggles the preview again
+  await input.press("Space");
+  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await expect(input).toHaveValue(""); // never typed into the box
+});

@@ -61,6 +61,8 @@ export const api = {
 
   togglePause: () => invoke<boolean>("toggle_pause"),
   hidePanel: () => invoke<void>("hide_panel"),
+  /// Image clips still awaiting OCR (progress indicator baseline).
+  ocrStatus: () => invoke<number>("ocr_status"),
   openSettings: () => invoke<void>("open_settings"),
   openAccessibilitySettings: () => invoke<void>("open_accessibility_settings"),
   /// Show the system prompt that adds Paste to the Accessibility list.
@@ -73,6 +75,14 @@ export const api = {
 export const events = {
   onNewClip: (cb: (clip: Clip) => void) =>
     listen<Clip>("clipboard:new", (e) => cb(e.payload)),
+  /** OCR finished for an image clip; payload carries the recognized text. */
+  onOcrResult: (cb: (result: { id: number; ocrText: string }) => void) =>
+    listen<{ id: number; ocrText: string }>("clipboard:ocr", (e) => cb(e.payload)),
+  /** OCR queue changed: pending count + whether recognition is running. */
+  onOcrProgress: (cb: (p: { pending: number; active: boolean }) => void) =>
+    listen<{ pending: number; active: boolean }>("clipboard:ocr-progress", (e) =>
+      cb(e.payload),
+    ),
   onPanelOpened: (cb: () => void) => listen("panel:opened", cb),
   onPauseChanged: (cb: (paused: boolean) => void) =>
     listen<boolean>("pause:changed", (e) => cb(e.payload)),

@@ -53,6 +53,15 @@ export default function ContentDetail({ clip }: { clip: Clip }) {
 
 function Body({ clip }: { clip: Clip }) {
   const t = useT();
+  const ocrPending = useStore((s) => s.ocrPending);
+  // Copy the OCR'd text of an image clip from the detail preview.
+  const copyOcrText = () => {
+    if (!clip.ocrText) return;
+    navigator.clipboard
+      .writeText(clip.ocrText)
+      .then(() => useStore.getState().showToast(t("Text copied")))
+      .catch(() => {});
+  };
   switch (clip.kind) {
     case "text":
       return clip.html && clip.html.trim() ? (
@@ -71,6 +80,20 @@ function Body({ clip }: { clip: Clip }) {
       return clip.imagePath ? (
         <div className="detail-img">
           <ClipboardImage path={clip.imagePath} />
+          {!clip.ocrText && (ocrPending ?? 0) > 0 && (
+            <div className="ocr-hint">
+              <span className="ocr-spinner" /> {t("Recognizing text…")}
+            </div>
+          )}
+          {clip.ocrText && (
+            <div className="detail-ocr">
+              <div className="ocr-head">
+                <span className="ocr-label">{t("Recognized text")}</span>
+                <button className="btn" onClick={copyOcrText}>{t("Copy Text")}</button>
+              </div>
+              <pre className="detail-text">{clip.ocrText}</pre>
+            </div>
+          )}
         </div>
       ) : (
         <div className="detail-text">{t("Image unavailable")}</div>

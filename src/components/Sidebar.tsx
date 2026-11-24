@@ -9,6 +9,7 @@ export default function Sidebar() {
   const pinboards = useStore((s) => s.pinboards);
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
+  const ocrPending = useStore((s) => s.ocrPending);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [pendingDel, setPendingDel] = useState<number | null>(null);
@@ -142,6 +143,13 @@ export default function Sidebar() {
         </button>
       )}
       <div className="spacer" />
+      {ocrPending != null && ocrPending > 0 && (
+        <div className="ocr-status" title={t("Recognizing text in pasted images…")}>
+          <span className="ocr-spinner" />
+          <span className="ocr-status-label">{t("OCR indexing")}</span>
+          <span className="ocr-count">{ocrPending}</span>
+        </div>
+      )}
       <div className="sidebar-foot">
         <button onClick={() => api.openSettings()}>{t("Settings…")}</button>
       </div>

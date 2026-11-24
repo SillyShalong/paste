@@ -83,6 +83,12 @@ impl AppState {
         std::fs::create_dir_all(data_dir.join("icons"))?;
 
         let db = store::open_db(&data_dir)?;
+        // Repair OCR text written before CJK space collapsing existed; a
+        // no-op once every row is normalized.
+        let fixed = store::normalize_existing_ocr_texts(&db);
+        if fixed > 0 {
+            eprintln!("[paste] normalized CJK spacing in {fixed} OCR texts");
+        }
         let settings = crate::settings::load(&db);
         Ok(Self {
             // Resume the persisted pause state: an app that was paused when it

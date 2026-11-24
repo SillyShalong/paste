@@ -57,6 +57,10 @@ pub struct AppSettings {
     /// UI language: "system" (follow OS) | "en" | "zh".
     #[serde(default)]
     pub language: String,
+    /// Recognize text in captured images (Windows OCR) so image clips are
+    /// searchable. Backfill covers history rows on startup.
+    #[serde(default = "default_true")]
+    pub ocr_enabled: bool,
 }
 
 fn default_hotkey() -> String {
@@ -88,6 +92,7 @@ impl Default for AppSettings {
             wheel_direction: "default".into(),
             tray_icon: "classic".into(),
             language: "system".into(),
+            ocr_enabled: true,
         }
     }
 }

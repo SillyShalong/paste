@@ -372,6 +372,56 @@ html, body, #root {
 .detail-link { display: flex; flex-direction: column; gap: 10px; }
 .link-host { font-size: 15px; font-weight: 700; }
 .detail-img img { max-width: none; max-height: none; border-radius: 6px; }
+.detail-ocr { margin-top: 18px; max-width: 720px; }
+.ocr-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ocr-head .btn { padding: 3px 10px; }
+.ocr-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.ocr-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* Sidebar OCR progress row */
+.ocr-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.ocr-status-label { flex: 1; }
+.ocr-count {
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent, #6c7a89) 18%, transparent);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ocr-spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--text-faint);
+  border-top-color: transparent;
+  animation: ocr-spin 0.9s linear infinite;
+}
+@keyframes ocr-spin { to { transform: rotate(360deg); } }
 .detail-files { display: flex; flex-direction: column; gap: 4px; }
 .detail-file-image { margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .detail-file-image img {

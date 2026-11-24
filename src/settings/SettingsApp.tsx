@@ -118,6 +118,15 @@ export default function SettingsApp() {
         <Row label={t("Paste as plain text by default")} desc={t("Strip formatting when pasting rich content")}>
           <Toggle on={settings.alwaysPlainText} onChange={(v) => update({ alwaysPlainText: v })} />
         </Row>
+        {/* OCR is implemented with Windows.Media.Ocr — Windows only. */}
+        {!isMac && (
+          <Row
+            label={t("Recognize text in images")}
+            desc={t("Run OCR on copied images so they can be found by search")}
+          >
+            <Toggle on={settings.ocrEnabled} onChange={(v) => update({ ocrEnabled: v })} />
+          </Row>
+        )}
         <Row label={t("Appearance")} desc={t("Panel theme")}>
           <select
             value={settings.theme ?? "system"}

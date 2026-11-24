@@ -275,6 +275,7 @@ fn on_clipboard_update() {
         html,
         image_path,
         files: files_json,
+        ocr_text: None,
         source_name: source_name.clone(),
         source_path,
         source_color,
@@ -302,6 +303,15 @@ fn on_clipboard_update() {
             drop(db);
             state.prune_retention(); // keep the retention window current
             let _ = app.emit_to("panel", "clipboard:new", &clip);
+            // Kick off text recognition for image clips so they become
+            // searchable (worker thread; never blocks the capture pipeline).
+            if kind == ClipKind::Image {
+                if let Some(p) = &clip.image_path {
+                    if settings.ocr_enabled {
+                        crate::ocr::enqueue(app, id, p.clone());
+                    }
+                }
+            }
         }
         Err(e) => {
             eprintln!("insert_clip failed: {e}");

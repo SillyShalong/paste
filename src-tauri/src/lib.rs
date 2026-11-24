@@ -3,6 +3,7 @@ pub mod clipboard;
 pub mod commands;
 #[cfg(target_os = "macos")]
 pub mod macos;
+pub mod ocr;
 pub mod paste;
 #[cfg(any(windows, test))]
 mod panel_autohide;
@@ -206,6 +207,8 @@ pub fn run() {
 
             build_tray(app.handle())?;
             clipboard::listener::start(app.handle().clone());
+            // Image OCR worker + history backfill (no-op off Windows).
+            crate::ocr::start(app.handle().clone());
 
             apply_shortcuts(app.handle())?;
 
@@ -267,6 +270,7 @@ pub fn run() {
             commands::recent_sources,
             commands::toggle_pause,
             commands::hide_panel,
+            commands::ocr_status,
             commands::open_settings,
             commands::paste_permission_granted,
         ])

@@ -12,6 +12,8 @@ export default function App() {
     init();
     const unlisteners = [
       events.onNewClip((clip) => store.getState().addClip(clip)),
+      events.onOcrResult(({ id, ocrText }) => store.getState().applyOcr(id, ocrText)),
+      events.onOcrProgress((p) => useStore.setState({ ocrPending: p.active ? p.pending : null })),
       events.onPanelOpened(() => {
         const s = store.getState();
         if (s.query) s.setQuery("");

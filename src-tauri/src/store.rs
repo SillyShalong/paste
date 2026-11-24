@@ -52,6 +52,10 @@ pub struct Clip {
     pub image_path: Option<String>,
     /// JSON array of file paths for file clips, null otherwise.
     pub files: Option<String>,
+    /// Text recognized in the image by OCR. NULL = not recognized yet
+    /// (or no engine available); an empty string = recognized, no text
+    /// found. Non-image clips are always null.
+    pub ocr_text: Option<String>,
     /// Display name of the source application.
     pub source_name: String,
     /// exe path of the source application (used to look up the icon).
@@ -98,14 +102,21 @@ fn register_regexp_function(conn: &Connection) -> rusqlite::Result<()> {
                 static CACHE: RefCell<Option<(String, Regex)>> = const { RefCell::new(None) };
             }
             let pattern: String = ctx.get(0)?;
-            let text: String = ctx.get(1)?;
+            // NULL operands happen for image clips (no text / no OCR text
+            // yet) — they simply never match instead of erroring the query.
+            let text: Option<String> = ctx.get(1)?;
             CACHE.with(|cache| {
                 let mut slot = cache.borrow_mut();
                 let matches = match slot.as_ref() {
-                    Some((cached, re)) if cached == &pattern => re.is_match(&text),
+                    Some((cached, re)) if cached == &pattern => {
+                        text.as_deref().map(|t| re.is_match(t)).unwrap_or(false)
+                    }
                     _ => match Regex::new(&format!("(?i){pattern}")) {
                         Ok(re) => {
-                            let hit = re.is_match(&text);
+                            let hit = text
+                                .as_deref()
+                                .map(|t| re.is_match(t))
+                                .unwrap_or(false);
                             *slot = Some((pattern, re));
                             return Ok(hit);
                         }
@@ -132,6 +143,7 @@ pub fn open_db(data_dir: &Path) -> rusqlite::Result<Connection> {
             html          TEXT,
             image_path    TEXT,
             files         TEXT,
+            ocr_text      TEXT,
             source_name   TEXT NOT NULL DEFAULT '',
             source_path   TEXT NOT NULL DEFAULT '',
             source_color  TEXT NOT NULL DEFAULT '',
@@ -167,6 +179,19 @@ pub fn open_db(data_dir: &Path) -> rusqlite::Result<Connection> {
         .unwrap_or(false);
     if !has_icon {
         conn.execute_batch("ALTER TABLE clips ADD COLUMN source_icon TEXT NOT NULL DEFAULT '';")?;
+    }
+    // Migration for databases created before ocr_text existed (newer DBs get
+    // the column from CREATE TABLE above). NULL = pending OCR.
+    let has_ocr: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('clips') WHERE name = 'ocr_text'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|v| v > 0)
+        .unwrap_or(false);
+    if !has_ocr {
+        conn.execute_batch("ALTER TABLE clips ADD COLUMN ocr_text TEXT;")?;
     }
     Ok(conn)
 }
@@ -206,6 +231,7 @@ fn row_to_clip(row: &Row) -> rusqlite::Result<Clip> {
         html: row.get("html")?,
         image_path: row.get("image_path")?,
         files: row.get("files")?,
+        ocr_text: row.get("ocr_text")?,
         source_name: row.get("source_name")?,
         source_path: row.get("source_path")?,
         source_color: row.get("source_color")?,
@@ -217,11 +243,13 @@ fn row_to_clip(row: &Row) -> rusqlite::Result<Clip> {
 }
 
 const CLIP_COLS: &str =
-    "id, kind, text, html, image_path, files, source_name, source_path, source_color, \
+    "id, kind, text, html, image_path, files, ocr_text, source_name, source_path, source_color, \
      source_icon, pinboard_id, created_at, paste_count";
 
 /// List clips, newest first. `pinboard_id`: Some(Some(id)) = clips of that
-/// pinboard; Some(None) = unpinned history; None = everything.
+/// pinboard; Some(None) = unpinned history; None = everything. When `search`
+/// is set, text clips match on `text` and image clips additionally match on
+/// their `ocr_text` (both columns, same pattern).
 /// Translate a user wildcard pattern into a LIKE pattern: `*` matches any
 /// run, `?` one character, everything else (including % _ \) is literal.
 fn wildcard_to_like(pattern: &str) -> String {
@@ -266,15 +294,21 @@ pub fn list_clips(
         match search_mode {
             "wildcard" => {
                 // * = any run, ? = one char; everything else literal.
+                // Image clips also match against their OCR'd text.
                 let pattern = format!("%{}%", wildcard_to_like(search));
-                sql.push_str(" AND text LIKE ?1 ESCAPE '\\'");
+                sql.push_str(
+                    " AND (text LIKE ? ESCAPE '\\' OR ocr_text LIKE ? ESCAPE '\\')",
+                );
+                args.push(Box::new(pattern.clone()));
                 args.push(Box::new(pattern));
             }
             "regex" => {
                 // REGEXP is a registered scalar function (open_db); an
                 // invalid pattern simply matches nothing.
-                sql.push_str(" AND text REGEXP ?1");
-                args.push(Box::new(format!("(?i){search}")));
+                sql.push_str(" AND (text REGEXP ? OR ocr_text REGEXP ?)");
+                let pattern = Box::new(format!("(?i){search}"));
+                args.push(pattern.clone());
+                args.push(pattern);
             }
             _ => {
                 // Escape LIKE wildcards so "100%" or "a_b" match literally.
@@ -282,7 +316,11 @@ pub fn list_clips(
                     .replace('\\', "\\\\")
                     .replace('%', "\\%")
                     .replace('_', "\\_");
-                sql.push_str(" AND text LIKE '%' || ? || '%' ESCAPE '\\'");
+                sql.push_str(
+                    " AND (text LIKE '%' || ? || '%' ESCAPE '\\' \
+                     OR ocr_text LIKE '%' || ? || '%' ESCAPE '\\')",
+                );
+                args.push(Box::new(escaped.clone()));
                 args.push(Box::new(escaped));
             }
         }
@@ -329,15 +367,16 @@ pub fn touch_clip(conn: &Connection, id: i64, now: i64) -> rusqlite::Result<usiz
 
 pub fn insert_clip(conn: &Connection, clip: &Clip) -> rusqlite::Result<i64> {
     conn.execute(
-        "INSERT INTO clips (kind, text, html, image_path, files, source_name, source_path, \
-         source_color, source_icon, pinboard_id, created_at, paste_count)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,0)",
+        "INSERT INTO clips (kind, text, html, image_path, files, ocr_text, source_name, \
+         source_path, source_color, source_icon, pinboard_id, created_at, paste_count)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,0)",
         params![
             clip.kind.as_str(),
             clip.text,
             clip.html,
             clip.image_path,
             clip.files,
+            clip.ocr_text,
             clip.source_name,
             clip.source_path,
             clip.source_color,
@@ -377,6 +416,71 @@ pub fn increment_paste_count(conn: &Connection, id: i64) -> rusqlite::Result<usi
         "UPDATE clips SET paste_count = paste_count + 1 WHERE id = ?1",
         params![id],
     )
+}
+
+/// Store the OCR result for an image clip, making it searchable.
+pub fn set_ocr_text(conn: &Connection, id: i64, text: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE clips SET ocr_text = ?2 WHERE id = ?1",
+        params![id, text],
+    )
+}
+
+/// Startup fixup: rows recognized before CJK space collapsing existed carry
+/// spaced-out text ("监 控 台") that substring search can never match.
+/// Rewrite them with the current normalization (idempotent — already-normal
+/// rows are left untouched). Returns the number of rows changed.
+pub fn normalize_existing_ocr_texts(conn: &Connection) -> usize {
+    let Ok(mut stmt) =
+        conn.prepare("SELECT id, ocr_text FROM clips WHERE kind = 'image' AND ocr_text LIKE '% %'")
+    else {
+        return 0;
+    };
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+        .ok()
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>().ok())
+        .unwrap_or_default();
+    let mut changed = 0;
+    for (id, text) in rows {
+        let normalized = crate::ocr::normalize_ocr_text(&text);
+        if normalized != text {
+            if set_ocr_text(conn, id, &normalized).is_ok() {
+                changed += 1;
+            }
+        }
+    }
+    changed
+}
+
+/// Image clips still awaiting OCR (oldest first): (id, image_path). Rows with
+/// a NULL image_path are skipped — nothing to recognize. The caller passes a
+/// batch limit so a large history is backfilled incrementally.
+pub fn list_missing_ocr(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<(i64, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, image_path FROM clips
+         WHERE kind = 'image' AND ocr_text IS NULL AND image_path IS NOT NULL
+         ORDER BY created_at ASC, id ASC LIMIT ?1",
+    )?;
+    let rows = stmt.query_map(params![limit], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+    })?;
+    rows.collect()
+}
+
+/// How many image clips are still awaiting OCR — the number behind the
+/// panel's OCR progress indicator.
+pub fn count_missing_ocr(conn: &Connection) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*) FROM clips
+         WHERE kind = 'image' AND ocr_text IS NULL AND image_path IS NOT NULL",
+        [],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
 }
 
 /// Delete all unpinned clips, keeping pinboarded ones. Returns the image
@@ -513,17 +617,40 @@ mod time {
 mod tests {
     use super::*;
 
-    /// Fresh on-disk DB (WAL pragma needs a file) with a unique temp dir.
-    fn test_db() -> Connection {
-        let dir = std::env::temp_dir().join(format!(
-            "paste-test-{}-{}",
+    /// Unique writable scratch dir for one test. Some locked-down machines
+    /// (security software) deny writes under %TEMP% to freshly built
+    /// unsigned test binaries — fall back to a workspace-local dir so the
+    /// suite still runs.
+    fn scratch_dir(prefix: &str) -> std::path::PathBuf {
+        let suffix = format!(
+            "{}-{}-{}",
+            prefix,
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        );
+        let candidates = [
+            std::env::temp_dir(),
+            std::env::current_dir()
+                .unwrap_or_default()
+                .join("target")
+                .join("test-tmp"),
+        ];
+        candidates
+            .iter()
+            .find_map(|base| {
+                let dir = base.join(&suffix);
+                std::fs::create_dir_all(&dir).ok()?;
+                Some(dir)
+            })
+            .expect("no writable temp dir available for tests")
+    }
+
+    /// Fresh on-disk DB (WAL pragma needs a file) with a unique temp dir.
+    fn test_db() -> Connection {
+        let dir = scratch_dir("paste-test");
         open_db(&dir).unwrap()
     }
 
@@ -535,6 +662,7 @@ mod tests {
             html: None,
             image_path: image_path.map(str::to_string),
             files: None,
+            ocr_text: None,
             source_name: "test".into(),
             source_path: String::new(),
             source_color: String::new(),
@@ -748,5 +876,149 @@ mod tests {
         assert_eq!(p2.position, 2);
         assert!(p2.created_at >= p1.created_at);
         assert_eq!(p2.name, "second");
+    }
+
+    /// An image clip whose OCR text carries the query must be found in all
+    /// three search modes, even though its `text` column is NULL.
+    #[test]
+    fn ocr_text_is_searchable_in_all_modes() {
+        let conn = test_db();
+        let mut c = clip(ClipKind::Image, None, Some("C:/tmp/shot.png"));
+        c.ocr_text = Some("会议纪要：下周三发布 v0.7.6".to_string());
+        insert_clip(&conn, &c).unwrap();
+
+        for mode in ["plain", "wildcard", "regex"] {
+            let q = match mode {
+                "plain" => "会议纪要",
+                "wildcard" => "会*要",
+                "regex" => "v0\\.7\\.6$",
+                _ => unreachable!(),
+            };
+            let hits = list_clips(&conn, Some(None), q, mode, None, 10, 0).unwrap();
+            assert_eq!(hits.len(), 1, "mode {mode} must match the OCR text");
+            assert_eq!(hits[0].kind, ClipKind::Image);
+        }
+
+        // A query matching neither column still finds nothing.
+        let none = list_clips(&conn, Some(None), "预算表", "plain", None, 10, 0).unwrap();
+        assert!(none.is_empty());
+    }
+
+    /// Regex search must tolerate rows with NULL text and NULL ocr_text
+    /// (image clips) instead of erroring the whole query away.
+    #[test]
+    fn regex_search_ignores_null_text_rows() {
+        let conn = test_db();
+        let mut img = clip(ClipKind::Image, None, Some("C:/tmp/pending.png"));
+        img.ocr_text = None;
+        insert_clip(&conn, &img).unwrap();
+        let mut a = clip(ClipKind::Text, Some("Alpha Note"), None);
+        a.created_at = 1;
+        insert_clip(&conn, &a).unwrap();
+
+        let hits = list_clips(&conn, Some(None), "^alpha", "regex", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("Alpha Note"));
+    }
+
+    /// The startup fixup collapses spaces inside CJK OCR text (making it
+    /// searchable) while leaving latin spacing and already-normal rows alone.
+    #[test]
+    fn normalize_existing_ocr_texts_fixes_spaced_cjk() {
+        let conn = test_db();
+        let mut spaced = clip(ClipKind::Image, None, Some("C:/tmp/a.png"));
+        spaced.ocr_text = Some("运 行 监 控 台".to_string());
+        let spaced_id = insert_clip(&conn, &spaced).unwrap();
+        let mut latin = clip(ClipKind::Image, None, Some("C:/tmp/b.png"));
+        latin.ocr_text = Some("hello world".to_string());
+        insert_clip(&conn, &latin).unwrap();
+
+        let changed = normalize_existing_ocr_texts(&conn);
+        assert_eq!(changed, 1);
+        assert_eq!(
+            get_clip(&conn, spaced_id).unwrap().unwrap().ocr_text.as_deref(),
+            Some("运行监控台")
+        );
+        // Now the plain search matches.
+        let hits = list_clips(&conn, Some(None), "监控", "plain", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        // Idempotent: a second pass changes nothing.
+        assert_eq!(normalize_existing_ocr_texts(&conn), 0);
+    }
+
+    /// set_ocr_text makes the clip searchable and removes it from the
+    /// missing-OCR queue the backfill scans.
+    #[test]
+    fn set_ocr_text_updates_and_backfill_queue_drains() {
+        let conn = test_db();
+        let mut old = clip(ClipKind::Image, None, Some("C:/tmp/old.png"));
+        old.created_at = 1;
+        let old_id = insert_clip(&conn, &old).unwrap();
+        let mut fresh = clip(ClipKind::Image, None, Some("C:/tmp/new.png"));
+        fresh.created_at = 2;
+        let fresh_id = insert_clip(&conn, &fresh).unwrap();
+        let mut text = clip(ClipKind::Text, Some("not an image"), None);
+        insert_clip(&conn, &text).unwrap();
+
+        let missing = list_missing_ocr(&conn, 10).unwrap();
+        // Oldest first; text clips are never queued.
+        assert_eq!(
+            missing,
+            vec![(old_id, "C:/tmp/old.png".to_string()), (fresh_id, "C:/tmp/new.png".to_string())]
+        );
+
+        set_ocr_text(&conn, old_id, "hello world").unwrap();
+        let missing = list_missing_ocr(&conn, 10).unwrap();
+        assert_eq!(missing, vec![(fresh_id, "C:/tmp/new.png".to_string())]);
+
+        let hits = list_clips(&conn, Some(None), "hello", "plain", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, old_id);
+        assert_eq!(hits[0].ocr_text.as_deref(), Some("hello world"));
+    }
+
+    /// A DB written before ocr_text existed is migrated on reopen.
+    #[test]
+    fn migration_readds_dropped_ocr_column() {
+        let dir = scratch_dir("paste-ocr-migration");
+        let path = dir.join("paste.db");
+
+        let conn = Connection::open(&path).unwrap();
+        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+        conn.execute_batch(
+            "CREATE TABLE clips (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                text TEXT,
+                html TEXT,
+                image_path TEXT,
+                files TEXT,
+                source_name TEXT NOT NULL DEFAULT '',
+                source_path TEXT NOT NULL DEFAULT '',
+                source_color TEXT NOT NULL DEFAULT '',
+                source_icon TEXT NOT NULL DEFAULT '',
+                pinboard_id INTEGER,
+                created_at INTEGER NOT NULL,
+                paste_count INTEGER NOT NULL DEFAULT 0
+            );",
+        )
+        .unwrap();
+        drop(conn);
+
+        let conn = open_db(&dir).unwrap();
+        let has_ocr: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('clips') WHERE name = 'ocr_text'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_ocr, 1);
+        // The migrated column is usable end to end.
+        let c = clip(ClipKind::Image, None, Some("C:/tmp/x.png"));
+        let c_id = insert_clip(&conn, &c).unwrap();
+        set_ocr_text(&conn, c_id, "migrated").unwrap();
+        let hits = list_clips(&conn, Some(None), "migrated", "plain", None, 10, 0).unwrap();
+        assert_eq!(hits.len(), 1);
     }
 }

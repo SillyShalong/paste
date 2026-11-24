@@ -7,6 +7,8 @@ export interface Clip {
   html: string | null;
   imagePath: string | null;
   files: string | null;
+  /** Text recognized in the image by OCR (null = pending/not available). */
+  ocrText: string | null;
   sourceName: string;
   sourcePath: string;
   sourceColor: string;
@@ -38,6 +40,8 @@ export interface Settings {
   wheelDirection: string;
   trayIcon: string;
   language: string;
+  /** Recognize text in copied images so they become searchable (Windows OCR). */
+  ocrEnabled: boolean;
 }
 
 export interface SourceInfo {

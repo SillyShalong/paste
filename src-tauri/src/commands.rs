@@ -231,6 +231,11 @@ pub fn set_settings(app: AppHandle, new_settings: AppSettings) -> Result<(), Str
 
     settings::save(&state.db.lock().unwrap(), &new_settings);
     state.prune_retention(); // a shorter window takes effect immediately
+    // Re-enable OCR backfill when the feature is switched back on so
+    // history accumulated while it was off becomes searchable.
+    if new_settings.ocr_enabled && !old_settings.ocr_enabled {
+        crate::ocr::kick_backfill(app.clone());
+    }
     crate::apply_tray_icon(&app, &new_settings.tray_icon);
     crate::refresh_tray(&app); // tray icon + menu labels follow the settings
     // Keep autostart in sync with the toggle.
@@ -312,6 +317,16 @@ pub fn hide_panel(app: AppHandle) {
     if let Some(panel) = app.get_webview_window("panel") {
         let _ = panel.hide();
     }
+}
+
+/// Current OCR queue depth, for the panel's progress indicator. The panel
+/// asks once at startup (progress events emitted before it existed are
+/// lost) and afterwards follows `clipboard:ocr-progress` events.
+#[tauri::command]
+pub fn ocr_status(app: AppHandle) -> i64 {
+    let state = app.state::<AppState>();
+    let db = state.db.lock().unwrap();
+    store::count_missing_ocr(&db)
 }
 
 /// Deep-link the user to the exact Accessibility pane (macOS; used by the
@@ -398,8 +413,19 @@ mod tests {
 
     #[test]
     fn read_file_image_whitelist_and_content() {
-        let dir = std::env::temp_dir().join("paste-read-file-image-test");
-        std::fs::create_dir_all(&dir).unwrap();
+        // %TEMP% first; locked-down machines (security software) fall back
+        // to the workspace-local target dir. See store::tests::test_db.
+        let base = std::env::temp_dir().join("paste-read-file-image-test");
+        let base = if std::fs::create_dir_all(&base).is_ok() {
+            base
+        } else {
+            let fallback = std::path::Path::new("target")
+                .join("test-tmp")
+                .join("paste-read-file-image-test");
+            std::fs::create_dir_all(&fallback).unwrap();
+            fallback
+        };
+        let dir = base;
 
         let png = dir.join("shot.PNG"); // extension match is case-insensitive
         std::fs::write(&png, PNG_1PX).unwrap();

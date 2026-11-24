@@ -17,10 +17,13 @@ interface StoreState {
   sidebarOpen: boolean;
   toast: string | null;
   detailClipId: number | null;
+  /** Image clips still awaiting OCR (null = no info yet; indicator hides at 0). */
+  ocrPending: number | null;
 
   init: () => Promise<void>;
   refetch: () => Promise<void>;
   addClip: (clip: Clip) => void;
+  applyOcr: (id: number, ocrText: string) => void;
   setQuery: (q: string) => void;
   setKindFilter: (k: ClipKind | "all") => void;
   setView: (v: View) => void;
@@ -43,6 +46,7 @@ interface StoreState {
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let ocrSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useStore = create<StoreState>((set, get) => ({
   clips: [],
@@ -57,6 +61,7 @@ export const useStore = create<StoreState>((set, get) => ({
   sidebarOpen: true,
   toast: null,
   detailClipId: null,
+  ocrPending: null,
 
   init: async () => {
     const data = await api.getInitial();
@@ -66,6 +71,10 @@ export const useStore = create<StoreState>((set, get) => ({
       sources: data.sources,
       paused: data.paused,
     });
+    api
+      .ocrStatus()
+      .then((n) => useStore.setState({ ocrPending: n }))
+      .catch(() => {});
     await get().refetch();
   },
 
@@ -95,6 +104,20 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!inView) return;
     const clips = get().clips.filter((c) => c.id !== clip.id);
     set({ clips: [clip, ...clips], sel: 0 });
+  },
+
+  applyOcr: (id, ocrText) => {
+    // Patch the recognized text into the visible list so search results and
+    // the open detail preview reflect it without a refetch.
+    set({
+      clips: get().clips.map((c) => (c.id === id ? { ...c, ocrText } : c)),
+    });
+    // While a search is active, backfilled items can start matching only
+    // after their text lands — pull fresh results as indexing progresses.
+    if (get().query) {
+      clearTimeout(ocrSearchTimer);
+      ocrSearchTimer = setTimeout(() => get().refetch(), 400);
+    }
   },
 
   setQuery: (q) => {

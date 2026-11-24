@@ -1,6 +1,6 @@
 [package]
 name = "paste"
-version = "0.7.5"
+version = "0.7.6"
 description = "Paste — a clipboard history app (clone of Paste for Mac) for Windows"
 authors = ["paste-clone"]
 edition = "2021"
@@ -10,6 +10,13 @@ edition = "2021"
 [lib]
 name = "paste_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Production builds MUST enable this (`tauri build` does automatically):
+# it embeds the frontend assets into the binary. A plain `cargo build
+# --release` without it produces an exe that loads the vite dev-server
+# URL instead — every window shows ERR_CONNECTION_REFUSED.
+custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -42,7 +49,13 @@ windows = { version = "0.58", features = [
   "Win32_System_Memory",
   "Win32_System_Threading",
   "Win32_System_LibraryLoader",
+  "Win32_System_Com",
   "Win32_Security",
+  "Foundation",
+  "Globalization",
+  "Graphics_Imaging",
+  "Media_Ocr",
+  "Storage_Streams",
 ] }
 
 # macOS (Apple Silicon) needs no extra crates: the ObjC interop in

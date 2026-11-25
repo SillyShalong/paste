@@ -51,13 +51,15 @@ export default function SearchBar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            // Space semantics depend on the box state: an EMPTY box hands
-            // Space to the panel (toggle the preview — a space in an empty
-            // query is worthless), a filled box keeps Space as a query
-            // character for multi-word searches. Escape clears the query
-            // and returns to card navigation (second Esc hides the panel).
+            // Space toggles the preview instead of typing a space — empty
+            // box or filled: search-then-preview is the primary flow, and
+            // queries with literal spaces are the rare case (Chinese
+            // queries have none). Shift+Space types the real space; the
+            // IME composing guard above keeps candidate selection intact.
+            // Escape clears the query and returns to card navigation
+            // (second Esc hides the panel).
             if (e.nativeEvent.isComposing) return;
-            if (e.key === " " && query === "") {
+            if (e.key === " " && !e.shiftKey) {
               e.preventDefault();
               e.stopPropagation();
               const s = useStore.getState();

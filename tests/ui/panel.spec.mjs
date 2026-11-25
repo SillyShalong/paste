@@ -706,13 +706,21 @@ test("space in an EMPTY search box toggles the preview", async ({ page }) => {
   await expect(page.locator(".detail-overlay")).toHaveCount(0); // toggles back
 });
 
-test("space in a FILLED search box types a character", async ({ page }) => {
+test("space in a FILLED search box previews; Shift+Space types a space", async ({ page }) => {
   await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
   const input = page.locator(".search-input");
   await input.click();
   await input.pressSequentially("alpha");
+  // Space previews the selected card instead of appending a space.
   await input.press("Space");
-  await expect(page.locator(".detail-overlay")).toHaveCount(0); // no preview hijack
+  await expect(page.locator(".detail-overlay")).toBeVisible();
+  await expect(input).toHaveValue("alpha"); // query untouched
+  await page.keyboard.press("Escape"); // close the preview
+  await expect(page.locator(".detail-overlay")).toHaveCount(0);
+  // Shift+Space is the escape hatch for literal spaces in a query.
+  await input.click();
+  await input.press("Shift+Space");
+  await expect(page.locator(".detail-overlay")).toHaveCount(0); // no preview
   await expect(input).toHaveValue("alpha ");
 });
 
@@ -720,7 +728,8 @@ test("escape in a filled search box clears it and returns to navigation", async 
   await page.evaluate((clips) => window.__store.setState({ clips }), FIXTURE_CLIPS);
   const input = page.locator(".search-input");
   await input.click();
-  await input.pressSequentially("alpha ");
+  await input.pressSequentially("alpha");
+  await input.press("Shift+Space"); // literal space, no preview hijack
   await input.press("Escape");
   await expect(input).toHaveValue(""); // query cleared
   await expect(input).not.toBeFocused(); // search mode exited

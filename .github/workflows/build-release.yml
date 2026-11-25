@@ -66,6 +66,9 @@ jobs:
       # -m "<release notes>"` is all it takes to give the release its
       # description. The auto-generated changelog link is appended below by
       # generate_release_notes.
+      # NOTE: create the tag with `--cleanup=verbatim` — git's default
+      # message cleanup strips lines starting with `#`, which silently eats
+      # markdown headers in the notes.
       - name: Extract release notes from the tag annotation
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

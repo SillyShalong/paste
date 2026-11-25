@@ -118,7 +118,9 @@ jobs:
 
       # Tags additionally publish the .dmg + .app zip on a GitHub Release.
       # The release body comes from the tag annotation (same as the Windows
-      # workflow); the generated changelog link is appended.
+      # workflow); the generated changelog link is appended. Create the tag
+      # with `--cleanup=verbatim` — git's default message cleanup strips
+      # lines starting with `#`, silently eating markdown headers.
       - name: Extract release notes from the tag annotation
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
